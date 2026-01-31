@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BloodLink - Create Urgent Request</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-danger">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('staff_dashboard') }}">
+                <i class="fas fa-heartbeat me-2"></i>BloodLink
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="{{ url_for('staff_dashboard') }}">
+                    <i class="fas fa-arrow-left me-1"></i>Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container mt-4">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header bg-danger text-white">
+                        <h3 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Create Urgent Blood Request</h3>
+                    </div>
+                    <div class="card-body">
+                        <!-- Flash Messages -->
+                        {% with messages = get_flashed_messages(with_categories=true) %}
+                            {% if messages %}
+                                {% for category, message in messages %}
+                                    <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show">
+                                        {{ message }}
+                                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                    </div>
+                                {% endfor %}
+                            {% endif %}
+                        {% endwith %}
+
+                        <!-- Instructions -->
+                        <div class="alert alert-warning">
+                            <i class="fas fa-info-circle me-2"></i>
+                            Use this form to create urgent blood requests. These requests will be sent as push notifications 
+                            to matching donors and will appear on the urgent requests dashboard.
+                        </div>
+
+                        <!-- Request Form -->
+                        <form method="POST" action="{{ url_for('create_request') }}" id="urgentRequestForm">
+                            <div class="row mb-4">
+                                <div class="col-md-6">
+                                    <div class="card h-100">
+                                        <div class="card-header bg-light">
+                                            <h5 class="mb-0"><i class="fas fa-tint me-2"></i>Blood Requirements</h5>
+                                        </div>
+                                        <div class="card-body">
+                                            <!-- Blood Type -->
+                                            <div class="mb-3">
+                                                <label class="form-label">Blood Type Required *</label>
+                                                <select class="form-select" name="blood_type" required>
+                                                    <option value="">Select blood type</option>
+                                                    {% for blood_type in blood_types %}
+                                                        <option value="{{ blood_type }}">{{ blood_type }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                                <small class="text-muted">Select the specific blood type needed</small>
+                                            </div>
+
+                                            <!-- Units Needed -->
+                                            <div class="mb-3">
+                                                <label class="form-label">Units Required *</label>
+                                                <div class="input-group">
+                                                    <input type="number" 
+                                                           class="form-control" 
+                                                           name="units_needed" 
+                                                           min="1" 
+                                                           max="50" 
+                                                           required
+                                                           placeholder="Enter number of units">
+                                                    <span class="input-group-text">units</span>
+                                                </div>
+                                                <small class="text-muted">Typically 1 unit = 450ml of blood</small>
+                                            </div>
+
+                                            <!-- Urgency Level -->
+                                            <div class="mb-3">
+                                                <label class="form-label">Urgency Level *</label>
+                                                <select class="form-select" name="urgency_level" required>
+                                                    <option value="">Select urgency level</option>
+                                                    {% for level in urgency_levels %}
+                                                        <option value="{{ level }}">{{ level }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <div class="card h-100">
+                                        <div class="card-header bg-light">
+                                            <h5 class="mb-0"><i class="fas fa-file-medical me-2"></i>Request Details</h5>
+                                        </div>
+                                        <div class="card-body">
+                                            <!-- Patient/Reason -->
+                                            <div class="mb-3">
+                                                <label class="form-label">Patient/Case Information</label>
+                                                <input type="text" 
+                                                       class="form-control" 
+                                                       name="patient_info"
+                                                       placeholder="e.g., Trauma patient, Surgery, etc.">
+                                            </div>
+
+                                            <!-- Hospital/Ward -->
+                                            <div class="mb-3">
+                                                <label class="form-label">Hospital/Ward</label>
+                                                <input type="text" 
+                                                       class="form-control" 
+                                                       name="hospital_ward"
+                                                       value="City General Hospital" 
+                                                       readonly>
+                                            </div>
+
+                                            <!-- Notes -->
+                                            <div class="mb-3">
+                                                <label class="form-label">Additional Notes</label>
+                                                <textarea class="form-control" 
+                                                          name="notes" 
+                                                          rows="4"
+                                                          placeholder="Any special requirements, timing constraints, or other important information..."></textarea>
+                                            </div>
+
+                                            <!-- Deadline -->
+                                            <div class="mb-3">
+                                                <label class="form-label">Required By (Optional)</label>
+                                                <input type="datetime-local" 
+                                                       class="form-control" 
+                                                       name="required_by"
+                                                       min="{{ current_datetime }}">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Preview Section -->
+                            <div class="card mb-4">
+                                <div class="card-header bg-info text-white">
+                                    <h5 class="mb-0"><i class="fas fa-eye me-2"></i>Request Preview</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row" id="requestPreview">
+                                        <div class="col-md-4 text-center">
+                                            <div class="display-6 text-danger" id="previewBloodType">--</div>
+                                            <small class="text-muted">Blood Type</small>
+                                        </div>
+                                        <div class="col-md-4 text-center">
+                                            <div class="display-6 text-warning" id="previewUnits">--</div>
+                                            <small class="text-muted">Units Required</small>
+                                        </div>
+                                        <div class="col-md-4 text-center">
+                                            <div class="display-6" id="previewUrgency">--</div>
+                                            <small class="text-muted">Urgency Level</small>
+                                        </div>
+                                    </div>
+                                    <div class="mt-3" id="previewNotes">
+                                        <p class="text-muted mb-0"><i>No notes provided</i></p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Available Inventory Warning -->
+                            <div class="alert alert-info d-none" id="inventoryWarning">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <span id="warningText"></span>
+                            </div>
+
+                            <!-- Form Actions -->
+                            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                                <button type="button" class="btn btn-secondary me-md-2" onclick="history.back()">
+                                    <i class="fas fa-times me-2"></i>Cancel
+                                </button>
+                                <button type="submit" class="btn btn-danger" id="submitBtn">
+                                    <i class="fas fa-paper-plane me-2"></i>Submit Urgent Request
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Quick Tips -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-lightbulb me-2"></i>Quick Tips</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="d-flex align-items-start mb-3">
+                                    <i class="fas fa-check-circle text-success me-2 mt-1"></i>
+                                    <div>
+                                        <h6>High Urgency</h6>
+                                        <small class="text-muted">For critical emergencies needing immediate response</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="d-flex align-items-start mb-3">
+                                    <i class="fas fa-clock text-warning me-2 mt-1"></i>
+                                    <div>
+                                        <h6>Medium Urgency</h6>
+                                        <small class="text-muted">For scheduled surgeries or planned procedures</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="d-flex align-items-start mb-3">
+                                    <i class="fas fa-calendar text-info me-2 mt-1"></i>
+                                    <div>
+                                        <h6>Low Urgency</h6>
+                                        <small class="text-muted">For inventory restocking or routine needs</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-light mt-5 py-3 border-top">
+        <div class="container">
+            <p class="text-center text-muted mb-0">
+                <i class="fas fa-shield-alt me-1"></i>Urgent requests are logged and monitored for audit purposes.
+            </p>
+        </div>
+    </footer>
+
+    <!-- JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Real-time preview updates
+        const form = document.getElementById('urgentRequestForm');
+        const previewBloodType = document.getElementById('previewBloodType');
+        const previewUnits = document.getElementById('previewUnits');
+        const previewUrgency = document.getElementById('previewUrgency');
+        const previewNotes = document.getElementById('previewNotes');
+        const inventoryWarning = document.getElementById('inventoryWarning');
+        const warningText = document.getElementById('warningText');
+        
+        // Update preview on form changes
+        form.addEventListener('input', function() {
+            // Update blood type preview
+            const bloodType = form.querySelector('[name="blood_type"]').value;
+            previewBloodType.textContent = bloodType || '--';
+            previewBloodType.className = `display-6 ${bloodType ? 'text-danger' : 'text-muted'}`;
+            
+            // Update units preview
+            const units = form.querySelector('[name="units_needed"]').value;
+            previewUnits.textContent = units || '--';
+            previewUnits.className = `display-6 ${units ? 'text-warning' : 'text-muted'}`;
+            
+            // Update urgency preview
+            const urgency = form.querySelector('[name="urgency_level"]').value;
+            previewUrgency.textContent = urgency || '--';
+            
+            if (urgency === 'High') {
+                previewUrgency.className = 'display-6 text-danger';
+            } else if (urgency === 'Medium') {
+                previewUrgency.className = 'display-6 text-warning';
+            } else if (urgency === 'Low') {
+                previewUrgency.className = 'display-6 text-info';
+            } else {
+                previewUrgency.className = 'display-6 text-muted';
+            }
+            
+            // Update notes preview
+            const notes = form.querySelector('[name="notes"]').value;
+            const patientInfo = form.querySelector('[name="patient_info"]').value;
+            
+            let previewText = '';
+            if (patientInfo) {
+                previewText += `<strong>Patient:</strong> ${patientInfo}<br>`;
+            }
+            if (notes) {
+                previewText += `<strong>Notes:</strong> ${notes}`;
+            }
+            
+            if (previewText) {
+                previewNotes.innerHTML = previewText;
+            } else {
+                previewNotes.innerHTML = '<p class="text-muted mb-0"><i>No notes provided</i></p>';
+            }
+            
+            // Check inventory
+            checkInventory(bloodType, units);
+        });
+        
+        function checkInventory(bloodType, units) {
+            if (!bloodType || !units) {
+                inventoryWarning.classList.add('d-none');
+                return;
+            }
+            
+            // Mock inventory data - in real app, fetch from API
+            const inventory = {
+                'A+': 25,
+                'A-': 15,
+                'B+': 15,
+                'B-': 10,
+                'AB+': 8,
+                'AB-': 5,
+                'O+': 30,
+                'O-': 12
+            };
+            
+            const currentStock = inventory[bloodType] || 0;
+            const needed = parseInt(units);
+            
+            if (needed > currentStock) {
+                const shortage = needed - currentStock;
+                warningText.textContent = `Warning: Only ${currentStock} units of ${bloodType} available in inventory. You're requesting ${needed} units (${shortage} unit shortage).`;
+                inventoryWarning.classList.remove('d-none');
+                inventoryWarning.className = 'alert alert-warning';
+            } else if (needed > currentStock * 0.8) {
+                warningText.textContent = `Note: You're requesting ${needed} units of ${bloodType} (${currentStock} units available). This will leave low stock.`;
+                inventoryWarning.classList.remove('d-none');
+                inventoryWarning.className = 'alert alert-info';
+            } else {
+                inventoryWarning.classList.add('d-none');
+            }
+        }
+        
+        // Form validation and submission
+        const submitBtn = document.getElementById('submitBtn');
+        
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Validate form
+            const bloodType = form.querySelector('[name="blood_type"]').value;
+            const units = form.querySelector('[name="units_needed"]').value;
+            const urgency = form.querySelector('[name="urgency_level"]').value;
+            
+            if (!bloodType || !units || !urgency) {
+                alert('Please fill in all required fields (Blood Type, Units Required, Urgency Level)');
+                return;
+            }
+            
+            // Show loading state
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Submitting...';
+            submitBtn.disabled = true;
+            
+            // Submit form
+            setTimeout(() => {
+                // In a real app, this would be the actual form submission
+                form.submit();
+            }, 1500);
+        });
+        
+        // Set minimum date/time for required_by field
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        
+        const minDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
+        const requiredByInput = form.querySelector('[name="required_by"]');
+        if (requiredByInput) {
+            requiredByInput.min = minDateTime;
+        }
+        
+        // Add urgency level styling
+        document.querySelector('[name="urgency_level"]').addEventListener('change', function() {
+            const urgency = this.value;
+            if (urgency === 'High') {
+                this.className = 'form-select border-danger';
+            } else if (urgency === 'Medium') {
+                this.className = 'form-select border-warning';
+            } else if (urgency === 'Low') {
+                this.className = 'form-select border-info';
+            } else {
+                this.className = 'form-select';
+            }
+        });
+    </script>
+</body>
+</html>
