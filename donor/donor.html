@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>BloodLink</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header>
+    <div class="header-container">
+        <div class="logo">
+            <i class="fas fa-tint"></i> BloodLink
+        </div>
+        <div class="header-right">
+            <button class="btn btn-menu" onclick="toggleSidebar()">
+                <i class="fas fa-bars"></i>
+            </button>
+        </div>
+    </div>
+</header>
+
+<div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <span>Menu</span>
+        <button class="close-btn" onclick="toggleSidebar()">&times;</button>
+    </div>
+    <nav class="sidebar-nav">
+        <a href="{{ url_for('donor_dashboard') }}"><i class="fas fa-home"></i> Home</a>
+        <a href="{{ url_for('donor_appointment') }}"><i class="fas fa-calendar-plus"></i> Book Appointment</a>
+        <a href="{{ url_for('donor_eligibility') }}"><i class="fas fa-clipboard-check"></i> Eligibility</a>
+        <a href="{{ url_for('donor_medical') }}"><i class="fas fa-file-medical"></i> Medical Info</a>
+        <a href="{{ url_for('donor_notifications') }}"><i class="fas fa-bell"></i> Alerts</a>
+        <hr>
+        <a href="{{ url_for('logout') }}" class="logout-link"><i class="fas fa-sign-out-alt"></i> Logout</a>
+    </nav>
+</div>
+
+<div id="main-content">
+    <section class="hero">
+        <div class="hero-text">
+            <h1>Donate Blood.</h1>
+            <p>Save Lives.</p>
+            <button class="btn btn-primary" onclick="window.location.href='appointment.html'">
+                <i class="fas fa-calendar-plus"></i> Make An Appointment
+            </button>
+        </div>
+        <div class="hero-image">
+            <span style="font-size: 150px;">❤️</span>
+        </div>
+    </section>
+
+    <section class="card-container">
+        <div class="card">
+            <h3>Am I Eligible to Donate Blood?</h3>
+            <div class="card-icon">📋</div>
+            <button class="btn btn-outline" onclick="window.location.href='eligibility.html'">
+                <i class="fas fa-clipboard-check"></i> Check Eligibility
+            </button>
+        </div>
+
+        <div class="card">
+            <h3>View Blood Donation Events</h3>
+            <div class="card-icon">🤝</div>
+            <button class="btn btn-outline" onclick="window.location.href='appointment.html'">
+                <i class="fas fa-calendar-alt"></i> View Events
+            </button>
+        </div>
+
+        <div class="card">
+            <h3>Make A Financial Donation</h3>
+            <div class="card-icon">🤲</div>
+            <button class="btn btn-outline">
+                <i class="fas fa-donate"></i> Donate Now
+            </button>
+        </div>
+    </section>
+</div>
+
+<script>
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    sidebar.classList.toggle('active');
+}
+
+// Close sidebar if user clicks outside of it
+document.addEventListener('click', function(event) {
+    const sidebar = document.getElementById('sidebar');
+    const btn = document.querySelector('.hamburger');
+    if (!sidebar.contains(event.target) && !btn.contains(event.target)) {
+        sidebar.classList.remove('active');
+    }
+})
+
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    // If you add an overlay div, toggle it here too
+    sidebar.classList.toggle('active');
+}
+
+// Close if user clicks anywhere outside the sidebar
+document.addEventListener('click', function(event) {
+    const sidebar = document.getElementById('sidebar');
+    const menuBtn = document.querySelector('.btn-menu');
+    
+    if (sidebar.classList.contains('active') && 
+        !sidebar.contains(event.target) && 
+        !menuBtn.contains(event.target)) {
+        sidebar.classList.remove('active');
+    }
+});;
+</script>
+
+</body>
+</html>
