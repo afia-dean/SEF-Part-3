@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>BloodLink | Organizer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='organizer.css') }}">
+</head>
+<body>
+    <header><h1>Event Organizer Dashboard</h1></header>
+    <div class="container">
+        
+        <div class="card">
+            <h2>Create Event</h2>
+            <form action="{{ url_for('create_event') }}" method="POST">
+                <input type="text" name="title" placeholder="Event Name" required>
+                <input type="date" name="date" required>
+                <input type="text" name="location" placeholder="Location" required>
+                <button type="submit">Save Event</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>Attendance Monitor</h2>
+            <table border="1" width="100%">
+                <tr><th>Donor ID</th><th>Event</th><th>Status</th><th>Actions</th></tr>
+                {% for reg in registrations %}
+                <tr>
+                    <td>{{ reg.donor_id }}</td>
+                    <td>{{ reg.events.title }}</td>
+                    <td><strong>{{ reg.status }}</strong></td>
+                    <td>
+                        <a href="{{ url_for('update_status', reg_id=reg.id, status='Attended') }}">Present</a> |
+                        <a href="{{ url_for('update_status', reg_id=reg.id, status='Absent') }}">Absent</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>Generate Reports</h2>
+            {% for event in events %}
+            <div style="display:flex; justify-content:space-between; padding:5px; border-bottom:1px solid #eee;">
+                <span>{{ event.title }}</span>
+                <a href="{{ url_for('generate_report', event_id=event.id) }}">View Report</a>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</body>
+</html>

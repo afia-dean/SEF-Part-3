@@ -1,63 +1,62 @@
-import os
-from flask import Flask, render_template
+from flask import Flask, render_template, request, redirect, url_for
 from supabase import create_client, Client
+import os
+from dotenv import load_dotenv
 
+load_dotenv()
 app = Flask(__name__)
 
-# 1. Supabase Configuration
-# Replace these with your actual Supabase credentials
-SUPABASE_URL = "https://axjhfhjifmctsaddotkr.supabase.co"
-SUPABASE_KEY = "sb_publishable_cGnABVgrhWhjKnmGgLAAsA_rIbrulIX"
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# Initialize Supabase
+url = os.getenv("SUPABASE_URL")
+key = os.getenv("SUPABASE_KEY")
+supabase: Client = create_client(url, key)
 
+# --- UC8: Monitor Registrations ---
 @app.route('/')
 def index():
-    """Renders the main homescreen with the Hero and Cards."""
-    return render_template('index.html')
-
-@app.route('/event_details')
-def event_details():
-    """Fetches event data from Supabase and returns the partial HTML."""
     try:
-        # 2. Query the 'events' table for a specific ID
-        # Make sure your table in Supabase is named 'events'
-        response = supabase.table("events").select("*").eq("id", "0001").execute()
-
-        # 3. Check if data exists; otherwise, provide fallback defaults
-        if response.data and len(response.data) > 0:
-            event_data = response.data[0]
-        else:
-            event_data = {
-                "name": "Event Not Found",
-                "id": "N/A",
-                "date": "N/A",
-                "location": "N/A",
-                "registered_count": 0,
-                "verified_count": 0,
-                "pending_count": 0
-            }
-            
-        # 4. Pass the 'event' object to the partial
-        return render_template('partials/event_details.html', event=event_data)
-
+        # Fetch data for the dashboard
+        events = supabase.table('events').select("*").execute()
+        # Ensure your table name matches 'registrations'
+        regs = supabase.table('registrations').select("*, events(title)").execute()
+        return render_template('organizer_dashboard.html', 
+                               events=events.data, 
+                               registrations=regs.data)
     except Exception as e:
-        print(f"Error connecting to Supabase: {e}")
-        return "Database Connection Error", 500
+        return f"Database Error: {e}. Check if tables 'events' and 'registrations' exist.", 500
+
+# --- UC7: Create Event ---
+@app.route('/create', methods=['POST'])
+def create_event():
+    data = {
+        "title": request.form.get('title'),
+        "date": request.form.get('date'),
+        "location": request.form.get('location')
+    }
+    supabase.table('events').insert(data).execute()
+    return redirect(url_for('index'))
+
+# --- UC10: Manage Attendance ---
+@app.route('/status/<int:reg_id>/<status>')
+def update_status(reg_id, status):
+    supabase.table('registrations').update({"status": status}).eq("id", reg_id).execute()
+    return redirect(url_for('index'))
+
+# --- UC9: Generate Report ---
+@app.route('/report/<int:event_id>')
+def generate_report(event_id):
+    event_data = supabase.table('events').select("*").eq("id", event_id).single().execute()
+    attendee_data = supabase.table('registrations').select("*").eq("event_id", event_id).execute()
+    
+    total = len(attendee_data.data)
+    present = sum(1 for a in attendee_data.data if a['status'] == 'Attended')
+    
+    return render_template('event_report.html', 
+                           event=event_data.data, 
+                           attendees=attendee_data.data, 
+                           total=total, 
+                           present=present)
 
 if __name__ == '__main__':
-    # Start the Flask development server
-    app.run(debug=True)
-from flask import Flask, render_template
-
-app = Flask(__name__)
-
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route('/event_details') # Must have the slash /
-def event_details():
-    return render_template('partials/event_details.html')
-
-if __name__ == '__main__':
-    app.run(debug=True)
+    # Using Port 5005 to ensure a fresh connection
+    app.run(debug=True, port=5005)
