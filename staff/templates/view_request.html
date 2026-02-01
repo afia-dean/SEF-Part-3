@@ -48,38 +48,37 @@
                         <div class="row mb-4">
                             {% set pending = requests|selectattr('status', 'equalto', 'Pending')|list|length %}
                             {% set fulfilled = requests|selectattr('status', 'equalto', 'Fulfilled')|list|length %}
-                            {% set cancelled = requests|selectattr('status', 'equalto', 'Cancelled')|list|length %}
                             {% set high = requests|selectattr('urgency_level', 'equalto', 'High')|list|length %}
                             
                             <div class="col-md-3 col-6 mb-3">
-                                <div class="card text-center border-danger">
+                                <div class="card text-center bg-warning text-dark">
                                     <div class="card-body">
-                                        <h2 class="display-6 text-danger">{{ pending }}</h2>
-                                        <p class="text-muted mb-0">Pending</p>
+                                        <h2 class="display-6">{{ pending }}</h2>
+                                        <p class="mb-0">Pending</p>
                                     </div>
                                 </div>
                             </div>
                             <div class="col-md-3 col-6 mb-3">
-                                <div class="card text-center border-success">
+                                <div class="card text-center bg-success text-white">
                                     <div class="card-body">
-                                        <h2 class="display-6 text-success">{{ fulfilled }}</h2>
-                                        <p class="text-muted mb-0">Fulfilled</p>
+                                        <h2 class="display-6">{{ fulfilled }}</h2>
+                                        <p class="mb-0">Fulfilled</p>
                                     </div>
                                 </div>
                             </div>
                             <div class="col-md-3 col-6 mb-3">
-                                <div class="card text-center border-warning">
+                                <div class="card text-center bg-danger text-white">
                                     <div class="card-body">
-                                        <h2 class="display-6 text-warning">{{ high }}</h2>
-                                        <p class="text-muted mb-0">High Urgency</p>
+                                        <h2 class="display-6">{{ high }}</h2>
+                                        <p class="mb-0">High Urgency</p>
                                     </div>
                                 </div>
                             </div>
                             <div class="col-md-3 col-6 mb-3">
-                                <div class="card text-center border-secondary">
+                                <div class="card text-center bg-secondary text-white">
                                     <div class="card-body">
-                                        <h2 class="display-6 text-secondary">{{ requests|length }}</h2>
-                                        <p class="text-muted mb-0">Total</p>
+                                        <h2 class="display-6">{{ requests|length }}</h2>
+                                        <p class="mb-0">Total</p>
                                     </div>
                                 </div>
                             </div>
@@ -199,60 +198,6 @@
                                     {% endif %}
                                 </tbody>
                             </table>
-                        </div>
-
-                        <!-- Timeline View -->
-                        <div class="card mt-4">
-                            <div class="card-header">
-                                <h5 class="mb-0"><i class="fas fa-stream me-2"></i>Request Timeline</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="timeline">
-                                    {% if requests[:3] %}  <!-- Show only latest 3 for timeline -->
-                                        {% for request in requests[:3] %}
-                                            <div class="timeline-item">
-                                                <div class="timeline-marker 
-                                                    {% if request.status == 'Fulfilled' %}bg-success
-                                                    {% elif request.status == 'Cancelled' %}bg-secondary
-                                                    {% else %}bg-warning{% endif %}">
-                                                </div>
-                                                <div class="timeline-content">
-                                                    <div class="d-flex justify-content-between">
-                                                        <h6>{{ request.blood_type }} Request</h6>
-                                                        <small class="text-muted">
-                                                            {% if request.requested_at %}
-                                                                {{ request.requested_at[:10] }}
-                                                            {% endif %}
-                                                        </small>
-                                                    </div>
-                                                    <p class="mb-1">
-                                                        {{ request.units_needed }} units | 
-                                                        <span class="badge bg-{% if request.urgency_level == 'High' %}danger
-                                                            {% elif request.urgency_level == 'Medium' %}warning text-dark
-                                                            {% else %}info{% endif %}">
-                                                            {{ request.urgency_level }}
-                                                        </span>
-                                                    </p>
-                                                    <small class="text-muted">
-                                                        Status: 
-                                                        <span class="badge bg-{% if request.status == 'Pending' %}warning text-dark
-                                                            {% elif request.status == 'Fulfilled' %}success
-                                                            {% elif request.status == 'Cancelled' %}secondary
-                                                            {% else %}primary{% endif %}">
-                                                            {{ request.status }}
-                                                        </span>
-                                                    </small>
-                                                </div>
-                                            </div>
-                                        {% endfor %}
-                                    {% else %}
-                                        <p class="text-center text-muted py-3">
-                                            <i class="fas fa-stream me-1"></i>
-                                            No recent requests to show in timeline.
-                                        </p>
-                                    {% endif %}
-                                </div>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -487,22 +432,224 @@
             window.print();
         });
 
-        // Fulfill request
-        document.querySelectorAll('.fulfill-request').forEach(button => {
-            button.addEventListener('click', function() {
-                const requestId = this.getAttribute('data-request-id');
+// Fulfill request - UPDATED FOR DATABASE
+document.querySelectorAll('.fulfill-request').forEach(button => {
+    button.addEventListener('click', async function() {
+        const requestId = this.getAttribute('data-request-id');
+        
+        if (confirm(`Mark request #${requestId} as fulfilled?`)) {
+            this.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+            
+            try {
+                const response = await fetch(`/staff/requests/${requestId}/fulfill`, {
+                    method: 'POST'
+                });
                 
-                if (confirm(`Mark request #${requestId} as fulfilled?`)) {
-                    this.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+                const result = await response.json();
+                
+                if (result.success) {
+                    this.innerHTML = '<i class="fas fa-check"></i>';
+                    this.className = 'btn btn-sm btn-success';
+                    this.disabled = true;
                     
-                    setTimeout(() => {
-                        this.innerHTML = '<i class="fas fa-check"></i>';
-                        this.className = 'btn btn-sm btn-success';
-                        alert(`Request #${requestId} marked as fulfilled!`);
-                    }, 1000);
+                    // Update status in table
+                    const row = this.closest('tr');
+                    const statusCell = row.cells[4];
+                    statusCell.innerHTML = '<span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Fulfilled</span>';
+                    
+                    // Disable other action buttons
+                    row.querySelectorAll('.fulfill-request, .cancel-request').forEach(btn => {
+                        btn.disabled = true;
+                    });
+                    
+                    showToast('Request marked as fulfilled!', 'success');
+                } else {
+                    alert(`Error: ${result.error}`);
+                    this.innerHTML = '<i class="fas fa-check"></i>';
                 }
-            });
-        });
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error fulfilling request');
+                this.innerHTML = '<i class="fas fa-check"></i>';
+            }
+        }
+    });
+});
+
+// Cancel request - UPDATED FOR DATABASE
+document.querySelectorAll('.cancel-request').forEach(button => {
+    button.addEventListener('click', async function() {
+        const requestId = this.getAttribute('data-request-id');
+        
+        if (confirm(`Cancel request #${requestId}?`)) {
+            this.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+            
+            try {
+                const response = await fetch(`/staff/requests/${requestId}/cancel`, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    this.innerHTML = '<i class="fas fa-times"></i>';
+                    this.className = 'btn btn-sm btn-secondary';
+                    this.disabled = true;
+                    
+                    // Update status in table
+                    const row = this.closest('tr');
+                    const statusCell = row.cells[4];
+                    statusCell.innerHTML = '<span class="badge bg-secondary"><i class="fas fa-times-circle me-1"></i>Cancelled</span>';
+                    
+                    // Disable other action buttons
+                    row.querySelectorAll('.fulfill-request, .cancel-request').forEach(btn => {
+                        btn.disabled = true;
+                    });
+                    
+                    showToast('Request cancelled!', 'info');
+                } else {
+                    alert(`Error: ${result.error}`);
+                    this.innerHTML = '<i class="fas fa-times"></i>';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error cancelling request');
+                this.innerHTML = '<i class="fas fa-times"></i>';
+            }
+        }
+    });
+});
+
+// Notify donors - UPDATED FOR DATABASE
+document.querySelectorAll('.notify-donors').forEach(button => {
+    button.addEventListener('click', async function() {
+        const requestId = this.getAttribute('data-request-id');
+        const bloodType = this.getAttribute('data-blood-type');
+        
+        if (confirm(`Send notification to ${bloodType} donors about request #${requestId}?`)) {
+            this.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+            
+            try {
+                const response = await fetch(`/staff/requests/${requestId}/notify`, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    this.innerHTML = '<i class="fas fa-bell"></i>';
+                    showToast(result.message, 'success');
+                } else {
+                    alert(`Error: ${result.error}`);
+                    this.innerHTML = '<i class="fas fa-bell"></i>';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error sending notification');
+                this.innerHTML = '<i class="fas fa-bell"></i>';
+            }
+        }
+    });
+});
+
+// View details - Get real request data
+document.querySelectorAll('.view-details').forEach(button => {
+    button.addEventListener('click', async function() {
+        const requestId = this.getAttribute('data-request-id');
+        const modalBody = document.querySelector('#detailsModal .modal-body');
+        
+        modalBody.innerHTML = `
+            <div class="text-center">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        `;
+        
+        try {
+            // Fetch request details - use correct endpoint
+            const response = await fetch(`/staff/requests/${requestId}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                const request = result.request;
+                
+                // Format dates
+                const requestDate = request.requested_at ? 
+                    new Date(request.requested_at).toLocaleDateString() : 'N/A';
+                const requestTime = request.requested_at ?
+                    new Date(request.requested_at).toLocaleTimeString() : 'N/A';
+                
+                // Determine urgency badge color
+                let urgencyColor = 'info';
+                if (request.urgency_level === 'High') urgencyColor = 'danger';
+                if (request.urgency_level === 'Medium') urgencyColor = 'warning text-dark';
+                
+                // Determine status badge color
+                let statusColor = 'warning text-dark';
+                if (request.status === 'Fulfilled') statusColor = 'success';
+                if (request.status === 'Cancelled') statusColor = 'secondary';
+                
+                modalBody.innerHTML = `
+                    <div class="text-center mb-4">
+                        <div class="avatar-circle-lg bg-danger text-white mx-auto mb-3">
+                            R
+                        </div>
+                        <h4>Request #${requestId}</h4>
+                        <p class="text-muted">Urgent Blood Request Details</p>
+                    </div>
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header bg-light">
+                                    <h6 class="mb-0"><i class="fas fa-tint me-2"></i>Blood Requirements</h6>
+                                </div>
+                                <div class="card-body">
+                                    <p><strong>Blood Type:</strong> <span class="badge bg-danger">${request.blood_type || 'Unknown'}</span></p>
+                                    <p><strong>Units Required:</strong> ${request.units_needed || 0} units</p>
+                                    <p><strong>Urgency Level:</strong> <span class="badge bg-${urgencyColor}">${request.urgency_level || 'Medium'}</span></p>
+                                    <p><strong>Status:</strong> <span class="badge bg-${statusColor}">${request.status || 'Pending'}</span></p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header bg-light">
+                                    <h6 class="mb-0"><i class="fas fa-hospital me-2"></i>Request Information</h6>
+                                </div>
+                                <div class="card-body">
+                                    <p><strong>Requested By:</strong> ${request.staff_name || session.staff_name || 'Staff'}</p>
+                                    <p><strong>Hospital:</strong> ${request.hospital_name || session.hospital_name || 'City General Hospital'}</p>
+                                    <p><strong>Request Date:</strong> ${requestDate}</p>
+                                    <p><strong>Request Time:</strong> ${requestTime}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0"><i class="fas fa-file-alt me-2"></i>Notes</h6>
+                        </div>
+                        <div class="card-body">
+                            <p>${request.notes || 'No additional notes provided.'}</p>
+                        </div>
+                    </div>
+                `;
+            } else {
+                modalBody.innerHTML = `<div class="alert alert-danger">Error: ${result.error}</div>`;
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            modalBody.innerHTML = `<div class="alert alert-danger">Error loading request details: ${error.message}</div>`;
+        }
+    });
+});
 
         // Cancel request
         document.querySelectorAll('.cancel-request').forEach(button => {
