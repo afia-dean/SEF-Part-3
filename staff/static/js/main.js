@@ -261,6 +261,23 @@ function timeSince(dateString) {
     return Math.floor(seconds) + ' seconds ago';
 }
 
+function toggleFields() {
+    const role = document.getElementById('role').value;
+    const donorFields = document.getElementById('donorFields');
+    const staffFields = document.getElementById('staffFields');
+    
+    if (role === 'donor') {
+        donorFields.style.display = 'block';
+        staffFields.style.display = 'none';
+    } else if (role === 'staff') {
+        donorFields.style.display = 'none';
+        staffFields.style.display = 'block';
+    } else {
+        donorFields.style.display = 'none';
+        staffFields.style.display = 'none';
+    }
+}
+
 // Add global helper functions
 window.formatDate = formatDate;
 window.timeSince = timeSince;
