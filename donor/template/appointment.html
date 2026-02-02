@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Book Appointment - BloodLink</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header>
+    <div class="header-container">
+        <div class="logo">
+            <i class="fas fa-tint"></i> BloodLink
+        </div>
+        <div class="header-right">
+            <button class="btn btn-menu" onclick="toggleSidebar()">
+                <i class="fas fa-bars"></i>
+            </button>
+        </div>
+    </div>
+</header>
+
+<div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <span>Menu</span>
+        <button class="close-btn" onclick="toggleSidebar()">&times;</button>
+    </div>
+    <nav class="sidebar-nav">
+        <a href="{{ url_for('donor_dashboard') }}"><i class="fas fa-home"></i> Home</a>
+        <a href="{{ url_for('donor_appointment') }}"><i class="fas fa-calendar-plus"></i> Book Appointment</a>
+        <a href="{{ url_for('donor_eligibility') }}"><i class="fas fa-clipboard-check"></i> Eligibility</a>
+        <a href="{{ url_for('donor_medical') }}"><i class="fas fa-file-medical"></i> Medical Info</a>
+        <a href="{{ url_for('donor_notifications') }}"><i class="fas fa-bell"></i> Alerts</a>
+        <hr>
+        <a href="{{ url_for('logout') }}" class="logout-link"><i class="fas fa-sign-out-alt"></i> Logout</a>
+    </nav>
+</div>
+
+<div class="container-small">
+    <div class="card">
+        <h2 class="text-center"><i class="fas fa-calendar-plus"></i> Book Appointment</h2>
+        
+        <!-- Simple eligibility check -->
+        {% if donor and not donor.eligibility_status %}
+        <div class="alert" style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin-bottom: 20px; border-radius: 4px;">
+            <i class="fas fa-exclamation-triangle" style="color: #856404;"></i>
+            <strong>Note:</strong> You must be eligible to donate blood to book an appointment. 
+            <a href="{{ url_for('donor_eligibility') }}" style="color: var(--primary-red); text-decoration: underline;">Check your eligibility</a> first.
+        </div>
+        {% endif %}
+        
+        <form id="appointmentForm">
+            <div class="form-group">
+                <label><i class="fas fa-hospital"></i> Select Blood Donation Event</label>
+                <select id="event" name="event" required>
+                    <option value="" disabled selected>Select an event</option>
+                    {% for event in events %}
+                    <option value="{{ event.id }}">
+                        🏥 {{ event.title }} - {{ event.date }} at {{ event.location }}
+                    </option>
+                    {% endfor %}
+                </select>
+                
+                {% if not events %}
+                <p style="color: #666; font-size: 0.9rem; margin-top: 5px;">
+                    <i class="fas fa-info-circle"></i> No upcoming events available. Check back later.
+                </p>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                <label><i class="fas fa-calendar-day"></i> Date</label>
+                <input type="date" id="date" name="date" required>
+            </div>
+            
+            <div class="form-group">
+                <label><i class="fas fa-clock"></i> Time</label>
+                <input type="time" id="time" name="time" required>
+            </div>
+            
+            {% if donor and donor.eligibility_status and events %}
+            <button type="submit" class="btn btn-primary" style="width:100%; padding: 14px;">
+                <i class="fas fa-check-circle"></i> Confirm Appointment
+            </button>
+            {% else %}
+            <button type="button" class="btn btn-primary" style="width:100%; padding: 14px; opacity: 0.6; cursor: not-allowed;" disabled>
+                <i class="fas fa-check-circle"></i> Confirm Appointment
+            </button>
+            {% endif %}
+        </form>
+    </div>
+    
+    <!-- Existing Appointments Section -->
+    {% if appointments %}
+    <div class="card" style="margin-top: 30px;">
+        <h3 class="text-center"><i class="fas fa-calendar-check"></i> Your Appointments</h3>
+        
+        <div style="max-height: 400px; overflow-y: auto;">
+            {% for appointment in appointments %}
+            <div class="appointment-item" style="border: 1px solid var(--border-light); border-radius: 8px; padding: 15px; margin-bottom: 10px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h4 style="margin: 0 0 5px;">
+                            {% if appointment.events and appointment.events.title %}
+                                {{ appointment.events.title }}
+                            {% else %}
+                                Appointment
+                            {% endif %}
+                        </h4>
+                        <p style="margin: 5px 0; color: var(--text-light);">
+                            <i class="fas fa-map-marker-alt"></i> 
+                            {% if appointment.events and appointment.events.location %}
+                                {{ appointment.events.location }}
+                            {% else %}
+                                Location TBD
+                            {% endif %}
+                        </p>
+                        <p style="margin: 5px 0; color: var(--text-light);">
+                            <i class="fas fa-clock"></i> 
+                            {% if appointment.check_in_time %}
+                                {{ appointment.check_in_time }}
+                            {% else %}
+                                Date/Time TBD
+                            {% endif %}
+                        </p>
+                    </div>
+                    <div>
+                        <span style="display: inline-block; padding: 5px 15px; border-radius: 20px; font-weight: 600; 
+                                     background: #e7f5ff; 
+                                     color: #0066cc;">
+                            {{ appointment.status or 'Scheduled' }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Set min date to today
+    const today = new Date().toISOString().split('T')[0];
+    const dateInput = document.getElementById('date');
+    if (dateInput) {
+        dateInput.min = today;
+        dateInput.value = today; // Default to today
+    }
+    
+    // Set default time to next hour
+    const timeInput = document.getElementById('time');
+    if (timeInput) {
+        const now = new Date();
+        const nextHour = now.getHours() + 1;
+        timeInput.value = nextHour.toString().padStart(2, '0') + ':00';
+    }
+    
+    // Form submission
+    const appointmentForm = document.getElementById("appointmentForm");
+    if (appointmentForm) {
+        appointmentForm.onsubmit = async function(e) {
+            e.preventDefault();
+            
+            const eventSelect = document.getElementById('event');
+            const dateInput = document.getElementById('date');
+            const timeInput = document.getElementById('time');
+            
+            if (!eventSelect.value) {
+                alert('Please select an event');
+                return;
+            }
+            
+            if (!dateInput.value) {
+                alert('Please select a date');
+                return;
+            }
+            
+            if (!timeInput.value) {
+                alert('Please select a time');
+                return;
+            }
+            
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            
+            // Show loading state
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Booking...';
+            submitBtn.disabled = true;
+            
+            const formData = {
+                event: eventSelect.value,
+                date: dateInput.value,
+                time: timeInput.value
+            };
+            
+            try {
+                const response = await fetch('/donor/appointment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    alert('Appointment booked successfully!');
+                    window.location.reload(); // Reload to show new appointment
+                } else {
+                    alert('Error: ' + (result.error || 'Failed to book appointment'));
+                }
+            } catch (error) {
+                alert('Network error. Please try again.');
+                console.error('Error:', error);
+            } finally {
+                // Restore button state
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            }
+        };
+    }
+});
+</script>
+</body>
+</html>
