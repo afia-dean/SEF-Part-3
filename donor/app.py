@@ -217,21 +217,34 @@ def donor_dashboard():
         
         donor = donor_response.data[0]
         
-        # Get appointments - handle if tables don't exist
+        # Get registered events
         appointments = []
         try:
-            # Get profile first
-            profile_response = supabase.table('profiles').select('*').eq('id', session['user_id']).execute()
-            if profile_response.data:
-                profile = profile_response.data[0]
-                # Get registrations
-                registrations_response = supabase.table('registrations')\
-                    .select('*')\
-                    .eq('donor_id', profile['id'])\
-                    .execute()
-                
-                if registrations_response.data:
-                    appointments = registrations_response.data
+            # Get registrations for this donor
+            registrations_response = supabase.table('registrations')\
+                .select('*')\
+                .eq('donor_id', session['user_id'])\
+                .execute()
+            
+            if registrations_response.data:
+                # Get event details for each registration
+                for registration in registrations_response.data:
+                    if registration.get('event_id'):
+                        event_response = supabase.table('events')\
+                            .select('*')\
+                            .eq('id', registration['event_id'])\
+                            .execute()
+                        
+                        if event_response.data:
+                            # Combine registration and event data
+                            event = event_response.data[0]
+                            appointment = {
+                                'event': event,
+                                'status': registration.get('status', 'Pending'),
+                                'registered_at': registration.get('registered_at'),
+                                'check_in_time': registration.get('registered_at')  # Use registered_at for display
+                            }
+                            appointments.append(appointment)
         except Exception as e:
             print(f"Note: Could not fetch appointments: {e}")
             appointments = []
@@ -260,7 +273,6 @@ def donor_dashboard():
     except Exception as e:
         print(f"Error loading dashboard: {e}")
         flash('Error loading dashboard', 'error')
-        # Redirect to login if dashboard fails
         return redirect(url_for('login'))
 
 def donor_appointment():
@@ -370,24 +382,17 @@ def donor_appointment():
         
         print(f"DEBUG: Found {len(events)} events in database")
         
-        # Get existing registrations (skip if profiles table doesn't exist)
+        # Get existing registrations for this donor
         registered_event_ids = []
         try:
-            # Try to get profile by email or name
-            profile_response = supabase.table('profiles')\
-                .select('*')\
-                .ilike('full_name', f"%{donor['donor_name']}%")\
+            # Use session['user_id'] (which is users.id) to check registrations
+            registrations_response = supabase.table('registrations')\
+                .select('event_id')\
+                .eq('donor_id', session['user_id'])\
                 .execute()
             
-            if profile_response.data:
-                profile = profile_response.data[0]
-                registrations_response = supabase.table('registrations')\
-                    .select('event_id')\
-                    .eq('donor_id', profile['id'])\
-                    .execute()
-                
-                if registrations_response.data:
-                    registered_event_ids = [reg['event_id'] for reg in registrations_response.data]
+            if registrations_response.data:
+                registered_event_ids = [reg['event_id'] for reg in registrations_response.data]
         except Exception as e:
             print(f"Note: Could not fetch registrations: {e}")
             registered_event_ids = []
@@ -401,7 +406,10 @@ def donor_appointment():
             event_date = None
             if event.get('event_date'):
                 if isinstance(event['event_date'], str):
-                    event_date = datetime.strptime(event['event_date'], '%Y-%m-%d').date()
+                    try:
+                        event_date = datetime.strptime(event['event_date'], '%Y-%m-%d').date()
+                    except:
+                        event_date = None
                 elif isinstance(event['event_date'], datetime):
                     event_date = event['event_date'].date()
             
@@ -434,45 +442,28 @@ def donor_appointment():
                 if not event_id:
                     return jsonify({'success': False, 'error': 'Event ID required'}), 400
                 
-                # Try to register (skip if profiles table issues)
-                try:
-                    profile_response = supabase.table('profiles')\
-                        .select('*')\
-                        .ilike('full_name', f"%{donor['donor_name']}%")\
-                        .execute()
-                    
-                    if not profile_response.data:
-                        return jsonify({'success': False, 'error': 'Could not find user profile'}), 400
-                    
-                    profile = profile_response.data[0]
-                    
-                    # Check if already registered
-                    existing_registration = supabase.table('registrations')\
-                        .select('*')\
-                        .eq('donor_id', profile['id'])\
-                        .eq('event_id', event_id)\
-                        .execute()
-                    
-                    if existing_registration.data:
-                        return jsonify({'success': False, 'error': 'Already registered for this event'}), 400
-                    
-                    # Create registration
-                    registration_response = supabase.table('registrations').insert({
-                        'donor_id': profile['id'],
-                        'event_id': event_id,
-                        'status': 'Pending',
-                        'registered_at': datetime.now().isoformat()
-                    }).execute()
-                    
-                    return jsonify({'success': True, 'message': 'Successfully registered for event!'})
-                    
-                except Exception as reg_error:
-                    print(f"Registration error: {reg_error}")
-                    # If registration fails, still show success but log it
-                    return jsonify({'success': True, 'message': 'Registered for event (registration may not be saved)'})
+                # Check if already registered
+                existing_registration = supabase.table('registrations')\
+                    .select('*')\
+                    .eq('donor_id', session['user_id'])\
+                    .eq('event_id', event_id)\
+                    .execute()
+                
+                if existing_registration.data:
+                    return jsonify({'success': False, 'error': 'Already registered for this event'}), 400
+                
+                # Create registration using user_id from session
+                registration_response = supabase.table('registrations').insert({
+                    'donor_id': session['user_id'],  # This is users.id
+                    'event_id': event_id,
+                    'status': 'Pending',
+                    'registered_at': datetime.now().isoformat()
+                }).execute()
+                
+                return jsonify({'success': True, 'message': 'Successfully registered for event!'})
                 
             except Exception as e:
-                print(f"Error in POST: {e}")
+                print(f"Error registering for event: {e}")
                 return jsonify({'success': False, 'error': str(e)}), 500
         
         return render_template('appointment.html',
