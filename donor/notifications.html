@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Alerts - BloodLink</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header>
+    <div class="header-container">
+        <div class="logo">
+            <i class="fas fa-tint"></i> BloodLink
+        </div>
+        <div class="header-right">
+            <button class="btn btn-menu" onclick="toggleSidebar()">
+                <i class="fas fa-bars"></i>
+            </button>
+        </div>
+    </div>
+</header>
+
+<div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <span>Menu</span>
+        <button class="close-btn" onclick="toggleSidebar()">&times;</button>
+    </div>
+    <nav class="sidebar-nav">
+        <a href="{{ url_for('donor_dashboard') }}"><i class="fas fa-home"></i> Home</a>
+        <a href="{{ url_for('donor_appointment') }}"><i class="fas fa-calendar-plus"></i> Book Appointment</a>
+        <a href="{{ url_for('donor_eligibility') }}"><i class="fas fa-clipboard-check"></i> Eligibility</a>
+        <a href="{{ url_for('donor_medical') }}"><i class="fas fa-file-medical"></i> Medical Info</a>
+        <a href="{{ url_for('donor_notifications') }}"><i class="fas fa-bell"></i> Alerts</a>
+        <hr>
+        <a href="{{ url_for('logout') }}" class="logout-link"><i class="fas fa-sign-out-alt"></i> Logout</a>
+    </nav>
+</div>
+
+<div class="page-container">
+    <div class="card">
+        <div class="header-actions">
+            <h2 style="margin: 0;"><i class="fas fa-bell"></i> Alerts & Notifications</h2>
+            <button class="btn btn-outline" onclick="markAllAsRead()" id="markReadBtn" style="display: none;">
+                <i class="fas fa-check-double"></i> Mark All as Read
+            </button>
+        </div>
+        
+        <div id="notificationsContainer">
+            <div id="loadingMessage" style="text-align: center; padding: 40px; color: #666;">
+                <i class="fas fa-spinner fa-spin fa-2x"></i>
+                <p>Loading your notifications...</p>
+            </div>
+            
+            <div id="noNotificationsMessage" style="text-align: center; padding: 40px; color: #666; display: none;">
+                <i class="fas fa-bell-slash fa-3x" style="color: #ddd; margin-bottom: 20px;"></i>
+                <h3 style="color: #666;">No notifications yet</h3>
+                <p>You'll see important alerts and updates here.</p>
+            </div>
+            
+            <div id="errorMessage" style="text-align: center; padding: 40px; color: #721c24; background: #f8d7da; border-radius: 8px; display: none;">
+                <i class="fas fa-exclamation-triangle fa-2x" style="margin-bottom: 20px;"></i>
+                <h3 style="color: #721c24;">Unable to load notifications</h3>
+                <p>Could not fetch notifications from database.</p>
+                <button class="btn btn-outline" onclick="loadNotifications()" style="margin-top: 15px;">
+                    <i class="fas fa-redo"></i> Try Again
+                </button>
+            </div>
+            
+            <div id="notificationsList" style="display: none;"></div>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadNotifications();
+});
+
+function loadNotifications() {
+    // Show loading, hide other states
+    document.getElementById('loadingMessage').style.display = 'block';
+    document.getElementById('noNotificationsMessage').style.display = 'none';
+    document.getElementById('errorMessage').style.display = 'none';
+    document.getElementById('notificationsList').style.display = 'none';
+    document.getElementById('markReadBtn').style.display = 'none';
+    
+    // Fetch REAL notifications from database
+    fetch('/donor/notifications/all')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to fetch notifications');
+            }
+            return response.json();
+        })
+        .then(data => {
+            document.getElementById('loadingMessage').style.display = 'none';
+            
+            if (data.success) {
+                if (data.notifications && data.notifications.length > 0) {
+                    // Show notifications
+                    displayNotifications(data.notifications);
+                    document.getElementById('markReadBtn').style.display = 'inline-flex';
+                } else {
+                    // Show "no notifications" message
+                    document.getElementById('noNotificationsMessage').style.display = 'block';
+                }
+            } else {
+                // Show error message
+                document.getElementById('errorMessage').style.display = 'block';
+                console.error('Server error:', data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading notifications:', error);
+            document.getElementById('loadingMessage').style.display = 'none';
+            document.getElementById('errorMessage').style.display = 'block';
+        });
+}
+
+function displayNotifications(notifications) {
+    const container = document.getElementById('notificationsList');
+    container.innerHTML = '';
+    container.style.display = 'block';
+    
+    notifications.forEach(notification => {
+        const notificationElement = createNotificationElement(notification);
+        container.appendChild(notificationElement);
+    });
+}
+
+function createNotificationElement(notification) {
+    const div = document.createElement('div');
+    div.className = 'notification';
+    div.style.border = '1px solid var(--border-light)';
+    div.style.borderRadius = '8px';
+    div.style.padding = '15px';
+    div.style.marginBottom = '10px';
+    div.style.background = 'white';
+    div.style.transition = 'all 0.3s';
+    
+    // Format date
+    let dateText = 'Recently';
+    if (notification.created_at || notification.timestamp) {
+        const dateString = notification.created_at || notification.timestamp;
+        try {
+            const date = new Date(dateString);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+            
+            if (diffHours < 1) {
+                dateText = 'Just now';
+            } else if (diffHours < 24) {
+                dateText = `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+            } else if (diffDays === 1) {
+                dateText = 'Yesterday';
+            } else if (diffDays < 7) {
+                dateText = `${diffDays} days ago`;
+            } else {
+                dateText = date.toLocaleDateString('en-US', { 
+                    month: 'short', 
+                    day: 'numeric',
+                    year: 'numeric'
+                });
+            }
+        } catch (e) {
+            console.error('Date parsing error:', e);
+            dateText = 'Recently';
+        }
+    }
+    
+    // Determine if notification is read
+    const isRead = notification.read || notification.status === 'read';
+    if (isRead) {
+        div.style.opacity = '0.7';
+        div.style.borderLeft = '4px solid #ddd';
+    } else {
+        div.style.opacity = '1';
+        div.style.borderLeft = '4px solid var(--primary-red)';
+        div.style.boxShadow = '0 2px 5px rgba(204, 0, 0, 0.1)';
+    }
+    
+    // Determine icon based on type
+    let icon = 'fa-bell';
+    let iconColor = '#c00';
+    
+    const type = notification.type || '';
+    const lowerType = type.toLowerCase();
+    
+    if (lowerType.includes('appointment') || lowerType.includes('schedule')) {
+        icon = 'fa-calendar-check';
+        iconColor = '#28a745';
+    } else if (lowerType.includes('emergency') || lowerType.includes('urgent')) {
+        icon = 'fa-heartbeat';
+        iconColor = '#dc3545';
+    } else if (lowerType.includes('eligibility')) {
+        icon = 'fa-clipboard-check';
+        iconColor = '#ffc107';
+    } else if (lowerType.includes('thank') || lowerType.includes('congrat')) {
+        icon = 'fa-award';
+        iconColor = '#007bff';
+    } else if (lowerType.includes('medical')) {
+        icon = 'fa-file-medical';
+        iconColor = '#6f42c1';
+    }
+    
+    div.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+            <i class="fas ${icon}" style="color: ${iconColor}; font-size: 1.2rem;"></i>
+            <div style="flex-grow: 1;">
+                <strong style="color: var(--text-dark);">${notification.title || 'Notification'}</strong>
+            </div>
+            <span style="color: var(--text-light); font-size: 0.85rem;">${dateText}</span>
+        </div>
+        <p style="color: var(--text-dark); margin: 0; line-height: 1.5;">${notification.message || 'No message content'}</p>
+        ${notification.source ? `<p style="color: var(--text-light); font-size: 0.85rem; margin-top: 5px;">Source: ${notification.source}</p>` : ''}
+    `;
+    
+    // Add click to mark as read
+    if (!isRead) {
+        div.style.cursor = 'pointer';
+        div.addEventListener('click', function() {
+            markNotificationAsRead(notification.id || notification.notification_id);
+            this.style.opacity = '0.7';
+            this.style.borderLeftColor = '#ddd';
+            this.style.boxShadow = 'none';
+        });
+    }
+    
+    return div;
+}
+
+function markNotificationAsRead(notificationId) {
+    fetch('/donor/notifications/mark-read', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ notification_id: notificationId })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (!data.success) {
+            console.error('Failed to mark notification as read:', data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error marking notification as read:', error);
+    });
+}
+
+function markAllAsRead() {
+    const btn = document.getElementById('markReadBtn');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Marking...';
+    btn.disabled = true;
+    
+    fetch('/donor/notifications/mark-all-read', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update UI - fade all notifications
+            const notifications = document.querySelectorAll('.notification');
+            notifications.forEach(notification => {
+                notification.style.opacity = '0.7';
+                notification.style.borderLeftColor = '#ddd';
+                notification.style.boxShadow = 'none';
+            });
+            
+            // Hide the button since all are read
+            btn.style.display = 'none';
+            
+            // Show success message
+            const successMsg = document.createElement('div');
+            successMsg.style.backgroundColor = '#d4edda';
+            successMsg.style.color = '#155724';
+            successMsg.style.padding = '10px';
+            successMsg.style.borderRadius = '5px';
+            successMsg.style.marginTop = '10px';
+            successMsg.innerHTML = '<i class="fas fa-check"></i> All notifications marked as read!';
+            document.getElementById('notificationsContainer').prepend(successMsg);
+            
+            // Remove message after 3 seconds
+            setTimeout(() => {
+                successMsg.remove();
+            }, 3000);
+        } else {
+            alert('Failed to mark notifications as read: ' + (data.error || 'Unknown error'));
+        }
+        
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Network error. Please try again.');
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    });
+}
+</script>
+</body>
+</html>
