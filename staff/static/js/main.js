@@ -145,6 +145,66 @@ $(document).ready(function() {
     }
 });
 
+// Sidebar toggle function
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.querySelector('.sidebar-overlay');
+    
+    if (!sidebar) return;
+    
+    if (sidebar.classList.contains('active')) {
+        // Close sidebar
+        sidebar.classList.remove('active');
+        if (overlay) {
+            overlay.classList.remove('active');
+            setTimeout(() => {
+                overlay.style.display = 'none';
+            }, 300);
+        }
+    } else {
+        // Open sidebar
+        sidebar.classList.add('active');
+        if (overlay) {
+            overlay.style.display = 'block';
+            // Trigger reflow for animation
+            void overlay.offsetWidth;
+            overlay.classList.add('active');
+        }
+    }
+}
+
+// Close sidebar when clicking overlay
+document.addEventListener('DOMContentLoaded', function() {
+    // Create overlay if it doesn't exist
+    let overlay = document.querySelector('.sidebar-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.className = 'sidebar-overlay';
+        overlay.addEventListener('click', toggleSidebar);
+        document.body.appendChild(overlay);
+    }
+    
+    // Close sidebar on escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar && sidebar.classList.contains('active')) {
+                toggleSidebar();
+            }
+        }
+    });
+    
+    // Auto-close sidebar on mobile when clicking a link
+    if (window.innerWidth <= 991) {
+        const sidebarLinks = document.querySelectorAll('.sidebar-nav a:not(.logout-link)');
+        sidebarLinks.forEach(link => {
+            link.addEventListener('click', function() {
+                toggleSidebar();
+            });
+        });
+    }
+});
+
 // Toast notification function
 function showToast(message, type = 'info') {
     const toastId = 'toast-' + Date.now();
@@ -261,23 +321,8 @@ function timeSince(dateString) {
     return Math.floor(seconds) + ' seconds ago';
 }
 
-function toggleFields() {
-    const role = document.getElementById('role').value;
-    const donorFields = document.getElementById('donorFields');
-    const staffFields = document.getElementById('staffFields');
-    
-    if (role === 'donor') {
-        donorFields.style.display = 'block';
-        staffFields.style.display = 'none';
-    } else if (role === 'staff') {
-        donorFields.style.display = 'none';
-        staffFields.style.display = 'block';
-    } else {
-        donorFields.style.display = 'none';
-        staffFields.style.display = 'none';
-    }
-}
-
 // Add global helper functions
 window.formatDate = formatDate;
 window.timeSince = timeSince;
+window.toggleSidebar = toggleSidebar;
+window.showToast = showToast;
