@@ -141,42 +141,45 @@
                     </div>
                 </div>
                 <div class="profile-info-item">
-    <div class="profile-label">
-        <i class="fas fa-history"></i> Last Donation
-    </div>
-    <div class="profile-value">
-        {% if donor and donor.last_donation_date %}
-            {{ donor.last_donation_date.strftime('%B %d, %Y') if donor.last_donation_date is string else 'Recently' }}
-        {% elif last_donation and last_donation.donation_date %}
-            {{ last_donation.donation_date.strftime('%B %d, %Y') }}
-        {% else %}
-            Never donated
-        {% endif %}
-    </div>
-</div>
-
-<!-- In the Member Since profile info item -->
-<div class="profile-info-item">
-    <div class="profile-label">
-        <i class="fas fa-calendar-alt"></i> Member Since
-    </div>
-    <div class="profile-value">
-        {% if donor and donor.created_at %}
-            {% if donor.created_at is string %}
-                {{ donor.created_at[:10] }}  <!-- Show just the date part -->
-            {% else %}
-                {{ donor.created_at.strftime('%B %d, %Y') }}
-            {% endif %}
-        {% else %}
-            Recently
-        {% endif %}
-    </div>
-</div>
+                    <div class="profile-label">
+                        <i class="fas fa-history"></i> Last Donation
+                    </div>
+                    <div class="profile-value">
+                        {% if donor and donor.last_donation_date %}
+                            {% if donor.last_donation_date is string %}
+                                {{ donor.last_donation_date[:10] }}
+                            {% else %}
+                                {{ donor.last_donation_date.strftime('%B %d, %Y') }}
+                            {% endif %}
+                        {% elif last_donation and last_donation.donation_date %}
+                            {{ last_donation.donation_date.strftime('%B %d, %Y') }}
+                        {% else %}
+                            Never donated
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="profile-info-item">
+                    <div class="profile-label">
+                        <i class="fas fa-calendar-alt"></i> Member Since
+                    </div>
+                    <div class="profile-value">
+                        {% if donor and donor.created_at %}
+                            {% if donor.created_at is string %}
+                                {{ donor.created_at[:10] }}
+                            {% else %}
+                                {{ donor.created_at.strftime('%B %d, %Y') }}
+                            {% endif %}
+                        {% else %}
+                            Recently
+                        {% endif %}
+                    </div>
+                </div>
             
-            <div class="profile-actions">
-                <a href="{{ url_for('donor_medical') }}" class="btn btn-outline">
-                    <i class="fas fa-file-medical"></i> Update Medical Info
-                </a>
+                <div class="profile-actions">
+                    <a href="{{ url_for('donor_medical') }}" class="btn btn-outline">
+                        <i class="fas fa-file-medical"></i> Update Medical Info
+                    </a>
+                </div>
             </div>
         </div>
     </section>
@@ -190,30 +193,43 @@
             <div class="appointment-card">
                 <div class="appointment-header">
                     <h3>
-                        {% if appointment.events and appointment.events.title %}
-                            {{ appointment.events.title }}
+                        {% if appointment.event and appointment.event.event_name %}
+                            {{ appointment.event.event_name }}
                         {% else %}
-                            Blood Donation Appointment
+                            Blood Donation Event
                         {% endif %}
                     </h3>
-                    <span class="appointment-status {{ appointment.status|lower }}">
+                    <span class="appointment-status {{ appointment.status|lower|replace('-', '') }}">
                         {{ appointment.status }}
                     </span>
                 </div>
                 <p class="appointment-location">
                     <i class="fas fa-map-marker-alt"></i> 
-                    {% if appointment.events and appointment.events.location %}
-                        {{ appointment.events.location }}
+                    {% if appointment.event and appointment.event.location %}
+                        {{ appointment.event.location }}
                     {% else %}
                         Location TBD
                     {% endif %}
                 </p>
                 <p class="appointment-time">
-                    <i class="fas fa-clock"></i> 
-                    {% if appointment.check_in_time %}
-                        {{ appointment.check_in_time.strftime('%B %d, %Y at %I:%M %p') if appointment.check_in_time is string else appointment.check_in_time }}
+                    <i class="fas fa-calendar"></i> 
+                    {% if appointment.event and appointment.event.event_date %}
+                        {{ appointment.event.event_date }} at {{ appointment.event.event_time }}
                     {% else %}
                         Date/Time TBD
+                    {% endif %}
+                </p>
+                <p class="appointment-registered">
+                    <i class="fas fa-clock"></i> 
+                    Registered: 
+                    {% if appointment.registered_at %}
+                        {% if appointment.registered_at is string %}
+                            {{ appointment.registered_at[:10] }}
+                        {% else %}
+                            {{ appointment.registered_at.strftime('%B %d, %Y') }}
+                        {% endif %}
+                    {% else %}
+                        Recently
                     {% endif %}
                 </p>
             </div>
