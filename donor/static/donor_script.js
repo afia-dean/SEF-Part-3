@@ -1,4 +1,3 @@
-// script.js - FIXED VERSION
 // Sidebar Toggle Logic
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
