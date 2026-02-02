@@ -1,673 +1,691 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BloodLink - Donor List</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>Donor List - BloodLink</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
-    <style>
-        .avatar-circle {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-        }
-        
-        .avatar-circle-lg {
-            width: 80px;
-            height: 80px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 2rem;
-            font-weight: bold;
-        }
-        
-        .blood-badge {
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-weight: bold;
-            background-color: #f8d7da;
-            color: #721c24;
-        }
-        
-        .blood-type-Apos, .blood-type-Aneg, .blood-type-Bpos, .blood-type-Bneg,
-        .blood-type-ABpos, .blood-type-ABneg, .blood-type-Opos, .blood-type-Oneg {
-            padding: 4px 10px;
-            border-radius: 15px;
-            font-weight: bold;
-            font-size: 0.9em;
-        }
-        
-        .blood-type-Apos, .blood-type-Aneg { background-color: #dc3545; color: white; }
-        .blood-type-Bpos, .blood-type-Bneg { background-color: #198754; color: white; }
-        .blood-type-ABpos, .blood-type-ABneg { background-color: #0d6efd; color: white; }
-        .blood-type-Opos, .blood-type-Oneg { background-color: #6f42c1; color: white; }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body>
-    <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-danger">
-        <div class="container">
-            <a class="navbar-brand" href="{{ url_for('staff_dashboard') }}">
-                <i class="fas fa-heartbeat me-2"></i>BloodLink
+<header>
+    <div class="header-container">
+        <!-- Logo on the left -->
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <a href="{{ url_for('staff_dashboard') }}" class="logo">
+                <i class="fas fa-tint"></i> BloodLink Staff
             </a>
-            <div class="navbar-nav ms-auto">
-                <a class="nav-link" href="{{ url_for('staff_dashboard') }}">
-                    <i class="fas fa-arrow-left me-1"></i>Back to Dashboard
-                </a>
+            <a href="{{ url_for('staff_dashboard') }}" class="btn btn-outline" 
+               style="color: var(--primary-red); border-color: var(--primary-red); padding: 8px 15px; font-size: 0.9rem;">
+                <i class="fas fa-home"></i> Home
+            </a>
+        </div>
+        
+        <!-- Hamburger menu on the right -->
+        <div class="header-right">
+            {% if session.get('staff_name') %}
+            <span class="welcome-text">
+                <i class="fas fa-user"></i> {{ session.staff_name }}
+            </span>
+            {% endif %}
+            <button class="btn btn-menu" onclick="toggleSidebar()">
+                <i class="fas fa-bars"></i>
+            </button>
+        </div>
+    </div>
+</header>
+
+<!-- Overlay (for mobile) -->
+<div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<!-- Sidebar on the RIGHT -->
+<div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <span>Staff Menu</span>
+        <button class="close-btn" onclick="toggleSidebar()">&times;</button>
+    </div>
+    <nav class="sidebar-nav">
+        <a href="{{ url_for('staff_dashboard') }}"><i class="fas fa-home"></i> Dashboard</a>
+        <a href="{{ url_for('view_inventory') }}"><i class="fas fa-boxes"></i> Inventory</a>
+        <a href="{{ url_for('donor_list') }}" class="active"><i class="fas fa-users"></i> Donors</a>
+        <a href="{{ url_for('view_requests') }}"><i class="fas fa-bell"></i> Requests</a>
+        <a href="{{ url_for('create_request') }}"><i class="fas fa-plus-circle"></i> New Request</a>
+        <hr>
+        <a href="{{ url_for('logout') }}" class="logout-link"><i class="fas fa-sign-out-alt"></i> Logout</a>
+    </nav>
+</div>
+
+<div class="page-container">
+    <div class="card">
+        <div class="header-actions">
+            <h2 style="margin: 0;"><i class="fas fa-users"></i> Donor Management</h2>
+            <button class="btn btn-primary" onclick="openAddDonorModal()">
+                <i class="fas fa-user-plus"></i> Add New Donor
+            </button>
+        </div>
+        
+        <!-- Statistics -->
+        <div class="stats-row" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin: 25px 0;">
+            {% set eligible_count = donors|selectattr('eligibility_status', 'equalto', true)|list|length %}
+            {% set universal_count = donors|selectattr('blood_type', 'equalto', 'O-')|list|length %}
+            
+            <div class="stat-box" style="background: #c00; color: white; padding: 15px; border-radius: var(--radius); text-align: center;">
+                <div style="font-size: 2rem; font-weight: bold;">{{ donors|length }}</div>
+                <div>Total Donors</div>
+            </div>
+            <div class="stat-box" style="background: #28a745; color: white; padding: 15px; border-radius: var(--radius); text-align: center;">
+                <div style="font-size: 2rem; font-weight: bold;">{{ eligible_count }}</div>
+                <div>Eligible Donors</div>
+            </div>
+            <div class="stat-box" style="background: #6f42c1; color: white; padding: 15px; border-radius: var(--radius); text-align: center;">
+                <div style="font-size: 2rem; font-weight: bold;">{{ universal_count }}</div>
+                <div>Universal (O-) Donors</div>
             </div>
         </div>
-    </nav>
-
-    <!-- Main Content -->
-    <main class="container mt-4">
-        <div class="row">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
-                        <h3 class="mb-0"><i class="fas fa-users me-2"></i>Donor Management</h3>
-                        <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#addDonorModal">
-                            <i class="fas fa-user-plus me-1"></i>Add New Donor
-                        </button>
-                    </div>
-                    <div class="card-body">
-                        <!-- Search and Filter -->
-                        <div class="row mb-4">
-                            <div class="col-md-6">
-                                <div class="input-group">
-                                    <input type="text" id="searchInput" class="form-control" placeholder="Search donors by name, blood type, or email...">
-                                    <button class="btn btn-outline-danger" type="button" id="searchButton">
-                                        <i class="fas fa-search"></i>
-                                    </button>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="row g-2">
-                                    <div class="col-md-4">
-                                        <select class="form-select" id="filterEligibility">
-                                            <option value="">All Eligibility</option>
-                                            <option value="eligible">Eligible</option>
-                                            <option value="not-eligible">Not Eligible</option>
-                                        </select>
+        
+        <!-- Search and Filter -->
+        <div class="search-filter-bar" style="background: white; padding: 15px; border-radius: var(--radius); margin-bottom: 20px; display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 200px;">
+                <input type="text" id="searchDonor" placeholder="Search by name or email..." 
+                       style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+            </div>
+            <div>
+                <select id="filterBloodType" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px; min-width: 120px;">
+                    <option value="">All Blood Types</option>
+                    <option value="A+">A+</option>
+                    <option value="A-">A-</option>
+                    <option value="B+">B+</option>
+                    <option value="B-">B-</option>
+                    <option value="AB+">AB+</option>
+                    <option value="AB-">AB-</option>
+                    <option value="O+">O+</option>
+                    <option value="O-">O-</option>
+                </select>
+            </div>
+            <div>
+                <select id="filterEligibility" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px; min-width: 140px;">
+                    <option value="">All Eligibility</option>
+                    <option value="eligible">Eligible</option>
+                    <option value="not-eligible">Not Eligible</option>
+                </select>
+            </div>
+            <div>
+                <button id="clearFilters" class="btn btn-outline" style="padding: 10px 15px;">
+                    <i class="fas fa-times"></i> Clear
+                </button>
+            </div>
+        </div>
+        
+        <!-- Donors Table -->
+        <div class="table-container">
+            <table class="data-table" id="donorsTable">
+                <thead>
+                    <tr>
+                        <th>Donor Name</th>
+                        <th>Blood Type</th>
+                        <th>Age</th>
+                        <th>Eligibility</th>
+                        <th>Last Donation</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if donors %}
+                        {% for donor in donors %}
+                            <tr>
+                                <td>
+                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                        <div class="avatar-circle" style="width: 40px; height: 40px; border-radius: 50%; background: #c00; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold;">
+                                            {{ donor.donor_name[0] if donor.donor_name else '?' }}
+                                        </div>
+                                        <div>
+                                            <strong>{{ donor.donor_name or 'Unknown' }}</strong><br>
+                                            <small style="color: #666;">{{ donor.email if donor.email else 'No email' }}</small>
+                                        </div>
                                     </div>
-                                    <div class="col-md-4">
-                                        <select class="form-select" id="filterBloodType">
-                                            <option value="">All Blood Types</option>
-                                            <option value="A+">A+</option>
-                                            <option value="A-">A-</option>
-                                            <option value="B+">B+</option>
-                                            <option value="B-">B-</option>
-                                            <option value="AB+">AB+</option>
-                                            <option value="AB-">AB-</option>
-                                            <option value="O+">O+</option>
-                                            <option value="O-">O-</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <button class="btn btn-outline-secondary w-100" id="resetFilters">
-                                            <i class="fas fa-redo me-1"></i>Reset
+                                </td>
+                                <td>
+                                    {% if donor.blood_type %}
+                                        {% if donor.blood_type in ['A+', 'A-'] %}
+                                            <span class="blood-badge" style="padding: 5px 10px; border-radius: 15px; font-weight: bold; background: #dc3545; color: white;">
+                                                {{ donor.blood_type }}
+                                            </span>
+                                        {% elif donor.blood_type in ['B+', 'B-'] %}
+                                            <span class="blood-badge" style="padding: 5px 10px; border-radius: 15px; font-weight: bold; background: #198754; color: white;">
+                                                {{ donor.blood_type }}
+                                            </span>
+                                        {% elif donor.blood_type in ['AB+', 'AB-'] %}
+                                            <span class="blood-badge" style="padding: 5px 10px; border-radius: 15px; font-weight: bold; background: #0d6efd; color: white;">
+                                                {{ donor.blood_type }}
+                                            </span>
+                                        {% elif donor.blood_type in ['O+', 'O-'] %}
+                                            <span class="blood-badge" style="padding: 5px 10px; border-radius: 15px; font-weight: bold; background: #6f42c1; color: white;">
+                                                {{ donor.blood_type }}
+                                            </span>
+                                        {% else %}
+                                            <span class="blood-badge" style="padding: 5px 10px; border-radius: 15px; font-weight: bold; background: #6c757d; color: white;">
+                                                {{ donor.blood_type }}
+                                            </span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="blood-badge" style="padding: 5px 10px; border-radius: 15px; font-weight: bold; background: #6c757d; color: white;">
+                                            Unknown
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ donor.age if donor.age else 'N/A' }}</td>
+                                <td>
+                                    {% if donor.eligibility_status %}
+                                        <span class="badge" style="background: #28a745; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.85rem;">
+                                            <i class="fas fa-check-circle"></i> Eligible
+                                        </span>
+                                    {% else %}
+                                        <span class="badge" style="background: #dc3545; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.85rem;">
+                                            <i class="fas fa-times-circle"></i> Not Eligible
+                                        </span>
+                                        {% if donor.disqualification_reason %}
+                                            <br><small style="color: #666;">{{ donor.disqualification_reason }}</small>
+                                        {% endif %}
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if donor.last_donation_date %}
+                                        {{ donor.last_donation_date }}
+                                    {% else %}
+                                        <span style="color: #999;">Never</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="action-buttons" style="display: flex; gap: 5px;">
+                                        <button class="btn btn-outline-primary view-donor" 
+                                                data-donor-id="{{ donor.id }}"
+                                                style="padding: 8px 12px; font-size: 0.9rem; border-radius: 8px;">
+                                            <i class="fas fa-eye"></i> View
+                                        </button>
+                                        <button class="btn btn-outline-warning toggle-eligibility"
+                                                data-donor-id="{{ donor.id }}"
+                                                data-current-status="{{ 'true' if donor.eligibility_status else 'false' }}"
+                                                style="padding: 8px 12px; font-size: 0.9rem; border-radius: 8px;">
+                                            {% if donor.eligibility_status %}
+                                                <i class="fas fa-ban"></i> Disqualify
+                                            {% else %}
+                                                <i class="fas fa-check"></i> Qualify
+                                            {% endif %}
                                         </button>
                                     </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Donors Table -->
-                        <div class="table-responsive">
-                            <table class="table table-hover" id="donorsTable">
-                                <thead class="table-dark">
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Donor Name</th>
-                                        <th>Blood Type</th>
-                                        <th>Age</th>
-                                        <th>Eligibility Status</th>
-                                        <th>Last Donation</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% if donors %}
-                                        {% for donor in donors %}
-                                        {% set blood_class = donor.blood_type.replace('+', 'pos').replace('-', 'neg') if donor.blood_type else 'unknown' %}
-                                        <tr>
-                                            <td>#{{ donor.id[-4:] if donor.id else loop.index }}</td>
-                                            <td>
-                                                <div class="d-flex align-items-center">
-                                                    <div class="avatar-circle bg-danger text-white me-3">
-                                                        {{ donor.donor_name[0] if donor.donor_name else '?' }}
-                                                    </div>
-                                                    <div>
-                                                        <strong>{{ donor.donor_name or 'Unknown' }}</strong><br>
-                                                        <small class="text-muted">{{ donor.email if donor.email else 'No email' }}</small>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <span class="blood-type-{{ blood_class }}">
-                                                    {{ donor.blood_type or 'Unknown' }}
-                                                </span>
-                                            </td>
-                                            <td>{{ donor.age if donor.age else 'N/A' }}</td>
-                                            <td>
-                                                {% if donor.eligibility_status %}
-                                                    <span class="badge bg-success">
-                                                        <i class="fas fa-check-circle me-1"></i>Eligible
-                                                    </span>
-                                                    {% else %}
-                                                    <span class="badge bg-danger">
-                                                        <i class="fas fa-times-circle me-1"></i>Not Eligible
-                                                    </span>
-                                                    {% endif %}
-                                                </td>
-                                            <td>
-                                                {% if donor.last_donation_date %}
-                                                {{ donor.last_donation_date }}
-                                                {% else %}
-                                                <span class="text-muted">Never</span>
-                                                {% endif %}
-                                            </td>
-                                            <td>
-                                                <div class="btn-group" role="group">
-                                                    <button class="btn btn-sm btn-outline-primary" 
-                                                            data-bs-toggle="modal" 
-                                                            data-bs-target="#viewDonorModal"
-                                                            data-donor-id="{{ donor.id }}">
-                                                        <i class="fas fa-eye"></i>
-                                                    </button>
-                                                    <button class="btn btn-sm btn-outline-warning"
-                                                            data-bs-toggle="modal"
-                                                            data-bs-target="#editDonorModal"
-                                                            data-donor-id="{{ donor.id }}">
-                                                        <i class="fas fa-edit"></i>
-                                                    </button>
-                                                    <button class="btn btn-sm btn-outline-{{ 'danger' if donor.eligibility_status else 'success' }} toggle-eligibility"
-                                                        data-donor-id="{{ donor.id }}"
-                                                        data-current-status="{{ 'true' if donor.eligibility_status else 'false' }}">
-                                                    {% if donor.eligibility_status %}
-                                                    <i class="fas fa-ban"></i>
-                                                    {% else %}
-                                                    <i class="fas fa-check"></i>
-                                                    {% endif %}
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                        {% endfor %}
-                                    {% else %}
-                                        <tr>
-                                            <td colspan="7" class="text-center text-muted py-5">
-                                                <i class="fas fa-user-slash fa-3x mb-3"></i><br>
-                                                No donors found. Add your first donor to get started.
-                                            </td>
-                                        </tr>
-                                    {% endif %}
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <!-- Statistics -->
-                        <div class="row mt-4">
-                            <div class="col-md-4">
-                                <div class="card text-center bg-danger text-white">
-                                    <div class="card-body">
-                                        <h2 class="display-6">{{ donors|length }}</h2>
-                                        <p class="mb-0">Total Donors</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="card text-center bg-success text-white">
-                                    <div class="card-body">
-                                        {% set eligible_count = donors|selectattr('eligibility_status', 'equalto', true)|list|length %}
-                                        <h2 class="display-6">{{ eligible_count }}</h2>
-                                        <p class="mb-0">Eligible Donors</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="card text-center bg-primary text-white">
-                                    <div class="card-body">
-                                        {% set universal_count = donors|selectattr('blood_type', 'equalto', 'O-')|list|length %}
-                                        <h2 class="display-6">{{ universal_count }}</h2>
-                                        <p class="mb-0">Universal Donors (O-)</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </main>
-
-    <!-- View Donor Modal -->
-    <div class="modal fade" id="viewDonorModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header bg-danger text-white">
-                    <h5 class="modal-title"><i class="fas fa-user me-2"></i>Donor Details</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body" id="viewDonorModalBody">
-                    <!-- Content will be loaded dynamically -->
-                    <div class="text-center">
-                        <div class="spinner-border text-danger" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="button" class="btn btn-danger" id="sendNotificationBtn">Send Notification</button>
-                </div>
-            </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="6" style="text-align: center; padding: 40px; color: #666;">
+                                <i class="fas fa-user-slash fa-2x" style="margin-bottom: 15px; color: #ddd;"></i>
+                                <p>No donors found.</p>
+                                <button class="btn btn-primary" onclick="openAddDonorModal()" style="margin-top: 10px;">
+                                    <i class="fas fa-user-plus"></i> Add First Donor
+                                </button>
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
         </div>
     </div>
+</div>
 
-    <!-- Add Donor Modal -->
-    <div class="modal fade" id="addDonorModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title"><i class="fas fa-user-plus me-2"></i>Add New Donor</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+<!-- Add Donor Modal -->
+<div id="addDonorModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 class="modal-title">
+                <i class="fas fa-user-plus"></i> Add New Donor
+            </h2>
+            <button class="modal-close" onclick="closeAddDonorModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <form id="addDonorForm">
+            <div class="form-group">
+                <label><i class="fas fa-user"></i> Full Name *</label>
+                <input type="text" class="form-input" name="donor_name" required 
+                       style="padding: 12px; font-size: 1rem; border-radius: 8px; border: 1px solid #ddd;">
+            </div>
+            <div class="form-group">
+                <label><i class="fas fa-envelope"></i> Email *</label>
+                <input type="email" class="form-input" name="email" required 
+                       style="padding: 12px; font-size: 1rem; border-radius: 8px; border: 1px solid #ddd;">
+            </div>
+            <div class="form-row" style="display: flex; gap: 15px;">
+                <div class="form-group" style="flex: 1;">
+                    <label><i class="fas fa-birthday-cake"></i> Age</label>
+                    <input type="number" class="form-input" name="age" min="18" max="65" 
+                           style="padding: 12px; font-size: 1rem; border-radius: 8px; border: 1px solid #ddd;">
                 </div>
-                <div class="modal-body">
-                    <form id="addDonorForm">
-                        <div class="mb-3">
-                            <label class="form-label">Full Name *</label>
-                            <input type="text" class="form-control" name="donor_name" required>
-                        </div>
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label class="form-label">Email *</label>
-                                <input type="email" class="form-control" name="email" required>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Age *</label>
-                                <input type="number" class="form-control" name="age" min="18" max="65" required>
-                            </div>
-                        </div>
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label class="form-label">Blood Type *</label>
-                                <select class="form-select" name="blood_type" required>
-                                    <option value="">Select blood type</option>
-                                    <option value="A+">A+</option>
-                                    <option value="A-">A-</option>
-                                    <option value="B+">B+</option>
-                                    <option value="B-">B-</option>
-                                    <option value="AB+">AB+</option>
-                                    <option value="AB-">AB-</option>
-                                    <option value="O+">O+</option>
-                                    <option value="O-">O-</option>
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Initial Eligibility Status</label>
-                                <select class="form-select" name="eligibility_status">
-                                    <option value="true">Eligible</option>
-                                    <option value="false">Not Eligible</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Medical History</label>
-                            <textarea class="form-control" name="medical_history" rows="3"></textarea>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" id="saveDonorBtn">Save Donor</button>
+                <div class="form-group" style="flex: 1;">
+                    <label><i class="fas fa-tint"></i> Blood Type *</label>
+                    <select class="form-input" name="blood_type" required 
+                            style="padding: 12px; font-size: 1rem; border-radius: 8px; border: 1px solid #ddd;">
+                        <option value="">Select</option>
+                        <option value="A+">A+</option>
+                        <option value="A-">A-</option>
+                        <option value="B+">B+</option>
+                        <option value="B-">B-</option>
+                        <option value="AB+">AB+</option>
+                        <option value="AB-">AB-</option>
+                        <option value="O+">O+</option>
+                        <option value="O-">O-</option>
+                    </select>
                 </div>
             </div>
+            <div class="form-group">
+                <label><i class="fas fa-clipboard-check"></i> Initial Eligibility Status</label>
+                <select class="form-input" name="eligibility_status" 
+                        style="padding: 12px; font-size: 1rem; border-radius: 8px; border: 1px solid #ddd;">
+                    <option value="true">Eligible</option>
+                    <option value="false">Not Eligible</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label><i class="fas fa-file-medical"></i> Medical History</label>
+                <textarea class="form-input" name="medical_history" rows="3" 
+                          style="padding: 12px; font-size: 1rem; border-radius: 8px; border: 1px solid #ddd;"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="closeAddDonorModal()" 
+                        style="padding: 12px 25px;">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+                <button type="submit" class="btn btn-primary" id="saveDonorBtn" 
+                        style="padding: 12px 25px;">
+                    <i class="fas fa-save"></i> Save Donor
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Donor Details Modal -->
+<div id="donorDetailsModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 class="modal-title">
+                <i class="fas fa-user-circle"></i> Donor Details
+            </h2>
+            <button class="modal-close" onclick="closeDonorDetailsModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <div id="donorDetailsContent" class="details-grid">
+            <!-- Content will be loaded here -->
+        </div>
+        
+        <div class="modal-footer">
+            <button onclick="closeDonorDetailsModal()" class="btn btn-outline" style="padding: 12px 25px;">
+                <i class="fas fa-times"></i> Close
+            </button>
         </div>
     </div>
+</div>
 
-    <!-- Footer -->
-    <footer class="bg-light mt-5 py-3 border-top">
-        <div class="container">
-            <p class="text-center text-muted mb-0">
-                <i class="fas fa-users me-1"></i>Showing {{ donors|length }} donors | Last updated: Today
-            </p>
-        </div>
-    </footer>
-
-    <!-- JavaScript -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
-    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
-    <script>
-        // Your JavaScript code goes here - make sure it's INSIDE the script tags
-        // Set progress bar widths
-        document.addEventListener('DOMContentLoaded', function() {
-            const progressBars = document.querySelectorAll('.progress-bar[data-percentage]');
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script>
+// Donor filter functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('searchDonor');
+    const bloodTypeFilter = document.getElementById('filterBloodType');
+    const eligibilityFilter = document.getElementById('filterEligibility');
+    const clearBtn = document.getElementById('clearFilters');
+    const tableRows = document.querySelectorAll('#donorsTable tbody tr');
+    
+    if (!searchInput || !tableRows.length) return;
+    
+    function filterDonors() {
+        const searchTerm = searchInput.value.toLowerCase();
+        const bloodType = bloodTypeFilter.value;
+        const eligibility = eligibilityFilter.value;
+        
+        tableRows.forEach(row => {
+            const name = row.cells[0].textContent.toLowerCase();
+            const email = row.cells[0].querySelector('small')?.textContent.toLowerCase() || '';
+            const bloodTypeCell = row.cells[1].textContent;
+            const eligibilityCell = row.cells[3].textContent;
             
-            progressBars.forEach(bar => {
-                const percentage = bar.getAttribute('data-percentage');
-                if (percentage !== null) {
-                    bar.style.width = percentage + '%';
-                }
-            });
-        });
-
-        // Initialize DataTable
-        $(document).ready(function() {
-            $('#donorsTable').DataTable({
-                "pageLength": 10,
-                "order": [[1, 'asc']],
-                "language": {
-                    "search": "Search donors:",
-                    "lengthMenu": "Show _MENU_ donors per page",
-                    "info": "Showing _START_ to _END_ of _TOTAL_ donors"
-                }
-            });
-        });
-
-        // Search functionality
-        document.getElementById('searchButton').addEventListener('click', function() {
-            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-            const rows = document.querySelectorAll('#donorsTable tbody tr');
+            const matchesSearch = name.includes(searchTerm) || email.includes(searchTerm);
+            const matchesBloodType = !bloodType || bloodTypeCell === bloodType;
+            const matchesEligibility = !eligibility || 
+                (eligibility === 'eligible' && eligibilityCell.includes('Eligible')) ||
+                (eligibility === 'not-eligible' && eligibilityCell.includes('Not Eligible'));
             
-            rows.forEach(row => {
-                const text = row.textContent.toLowerCase();
-                row.style.display = text.includes(searchTerm) ? '' : 'none';
-            });
+            row.style.display = (matchesSearch && matchesBloodType && matchesEligibility) ? '' : 'none';
         });
+    }
+    
+    searchInput.addEventListener('input', filterDonors);
+    bloodTypeFilter.addEventListener('change', filterDonors);
+    eligibilityFilter.addEventListener('change', filterDonors);
+    
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            searchInput.value = '';
+            bloodTypeFilter.value = '';
+            eligibilityFilter.value = '';
+            tableRows.forEach(row => row.style.display = '');
+        });
+    }
+});
 
-        // Filter functionality
-        document.getElementById('filterEligibility').addEventListener('change', filterTable);
-        document.getElementById('filterBloodType').addEventListener('change', filterTable);
+// Modal functions
+function openAddDonorModal() {
+    document.getElementById('addDonorModal').style.display = 'flex';
+    document.getElementById('addDonorForm').reset();
+}
 
-        function filterTable() {
-            const eligibilityFilter = document.getElementById('filterEligibility').value;
-            const bloodTypeFilter = document.getElementById('filterBloodType').value;
-            const rows = document.querySelectorAll('#donorsTable tbody tr');
-            
-            rows.forEach(row => {
-                const eligibilityCell = row.cells[4];
-                const bloodTypeCell = row.cells[2];
-                
-                if (!eligibilityCell || !bloodTypeCell) return;
-                
-                const eligibility = eligibilityCell.textContent.toLowerCase();
-                const bloodType = bloodTypeCell.textContent.trim();
-                
-                let showRow = true;
-                
-                if (eligibilityFilter) {
-                    if (eligibilityFilter === 'eligible') {
-                        showRow = showRow && eligibility.includes('eligible') && !eligibility.includes('not eligible');
-                    } else if (eligibilityFilter === 'not-eligible') {
-                        showRow = showRow && eligibility.includes('not eligible');
-                    }
-                }
-                
-                if (bloodTypeFilter && bloodTypeFilter !== '') {
-                    showRow = showRow && bloodType === bloodTypeFilter;
-                }
-                
-                row.style.display = showRow ? '' : 'none';
-            });
+function closeAddDonorModal() {
+    document.getElementById('addDonorModal').style.display = 'none';
+}
+
+function closeDonorDetailsModal() {
+    document.getElementById('donorDetailsModal').style.display = 'none';
+}
+
+// Close modals when clicking outside
+document.getElementById('addDonorModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeAddDonorModal();
+    }
+});
+
+document.getElementById('donorDetailsModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeDonorDetailsModal();
+    }
+});
+
+// Close modals with Escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        if (document.getElementById('addDonorModal').style.display === 'flex') {
+            closeAddDonorModal();
         }
+        if (document.getElementById('donorDetailsModal').style.display === 'flex') {
+            closeDonorDetailsModal();
+        }
+    }
+});
 
-        // Reset filters
-        document.getElementById('resetFilters').addEventListener('click', function() {
-            document.getElementById('searchInput').value = '';
-            document.getElementById('filterEligibility').value = '';
-            document.getElementById('filterBloodType').value = '';
-            
-            const rows = document.querySelectorAll('#donorsTable tbody tr');
-            rows.forEach(row => row.style.display = '');
+// Add donor form submission
+document.getElementById('addDonorForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const data = {};
+    formData.forEach((value, key) => {
+        data[key] = value;
+    });
+    
+    const saveBtn = document.getElementById('saveDonorBtn');
+    const originalText = saveBtn.innerHTML;
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    saveBtn.disabled = true;
+    
+    try {
+        const response = await fetch('/staff/donors/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
         });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast('Donor added successfully!', 'success');
+            closeAddDonorModal();
+            setTimeout(() => {
+                location.reload();
+            }, 1500);
+        } else {
+            showToast('Error: ' + result.error, 'error');
+            saveBtn.innerHTML = originalText;
+            saveBtn.disabled = false;
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showToast('An error occurred. Please try again.', 'error');
+        saveBtn.innerHTML = originalText;
+        saveBtn.disabled = false;
+    }
+});
 
-        // View donor modal
-        const viewDonorModal = document.getElementById('viewDonorModal');
-        viewDonorModal.addEventListener('show.bs.modal', async function(event) {
-            const button = event.relatedTarget;
-            const donorId = button.getAttribute('data-donor-id');
+// View donor details with beautiful modal
+document.querySelectorAll('.view-donor').forEach(button => {
+    button.addEventListener('click', async function() {
+        const donorId = this.getAttribute('data-donor-id');
+        
+        // Show loading state
+        const modalContent = document.getElementById('donorDetailsContent');
+        modalContent.innerHTML = `
+            <div class="loading-spinner" style="grid-column: 1 / -1;">
+                <div class="spinner"></div>
+                <p>Loading donor details...</p>
+            </div>
+        `;
+        
+        document.getElementById('donorDetailsModal').style.display = 'flex';
+        
+        try {
+            const response = await fetch('/staff/donors/' + donorId);
+            const result = await response.json();
             
-            const modalBody = document.getElementById('viewDonorModalBody');
-            modalBody.innerHTML = `
-                <div class="text-center">
-                    <div class="spinner-border text-danger" role="status">
-                        <span class="visually-hidden">Loading...</span>
+            if (result.success) {
+                const donor = result.donor;
+                
+                // Build beautiful modal content
+                const detailsHtml = `
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <div class="detail-icon">
+                                <i class="fas fa-user"></i>
+                            </div>
+                            <div>
+                                <div class="detail-label">Full Name</div>
+                                <div class="detail-value" style="font-size: 1.2rem; font-weight: 600;">${donor.donor_name || 'Not specified'}</div>
+                            </div>
+                        </div>
                     </div>
+                    
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <div class="detail-icon" style="background: linear-gradient(135deg, #17a2b8, #138496);">
+                                <i class="fas fa-envelope"></i>
+                            </div>
+                            <div>
+                                <div class="detail-label">Email Address</div>
+                                <div class="detail-value">${donor.email || 'Not provided'}</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <div class="detail-icon" style="background: linear-gradient(135deg, #6f42c1, #5a32a3);">
+                                <i class="fas fa-birthday-cake"></i>
+                            </div>
+                            <div>
+                                <div class="detail-label">Age</div>
+                                <div class="detail-value">${donor.age || 'Not specified'}</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="detail-card blood-type-card">
+                        <div class="detail-card-header">
+                            <div class="detail-icon">
+                                <i class="fas fa-tint"></i>
+                            </div>
+                            <div>
+                                <div class="detail-label">Blood Type</div>
+                                <div class="detail-value">
+                                    <span class="badge badge-primary" style="font-size: 1.1rem; padding: 10px 20px;">
+                                        ${donor.blood_type || 'Unknown'}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="detail-card status-card">
+                        <div class="detail-card-header">
+                            <div class="detail-icon">
+                                <i class="fas fa-clipboard-check"></i>
+                            </div>
+                            <div>
+                                <div class="detail-label">Eligibility Status</div>
+                                <div class="detail-value">
+                                    ${donor.eligibility_status ? 
+                                        '<span class="badge badge-success"><i class="fas fa-check-circle"></i> Eligible</span>' : 
+                                        '<span class="badge badge-danger"><i class="fas fa-times-circle"></i> Not Eligible</span>'}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    ${donor.disqualification_reason && !donor.eligibility_status ? `
+                    <div class="detail-card" style="grid-column: 1 / -1;">
+                        <div class="detail-card-header">
+                            <div class="detail-icon" style="background: linear-gradient(135deg, #dc3545, #c82333);">
+                                <i class="fas fa-exclamation-triangle"></i>
+                            </div>
+                            <div>
+                                <div class="detail-label">Disqualification Reason</div>
+                                <div class="detail-value">${donor.disqualification_reason}</div>
+                            </div>
+                        </div>
+                    </div>` : ''}
+                    
+                    <div class="detail-card medical-history-card" style="grid-column: 1 / -1;">
+                        <div class="detail-card-header">
+                            <div class="detail-icon">
+                                <i class="fas fa-file-medical"></i>
+                            </div>
+                            <div>
+                                <div class="detail-label">Medical History</div>
+                                <div class="detail-value">
+                                    ${donor.medical_history ? 
+                                        `<div class="notes-box">
+                                            ${donor.medical_history}
+                                        </div>` : 
+                                        '<em style="color: #999; font-style: italic;">No medical history provided</em>'}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <div class="detail-icon" style="background: linear-gradient(135deg, #ffc107, #e0a800);">
+                                <i class="fas fa-history"></i>
+                            </div>
+                            <div>
+                                <div class="detail-label">Last Donation</div>
+                                <div class="detail-value">${donor.last_donation_date || 'Never donated'}</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <div class="detail-icon" style="background: linear-gradient(135deg, #6c757d, #545b62);">
+                                <i class="fas fa-calendar-alt"></i>
+                            </div>
+                            <div>
+                                <div class="detail-label">Registration Date</div>
+                                <div class="detail-value">${donor.created_at ? donor.created_at.slice(0,10) : 'Unknown'}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                document.getElementById('donorDetailsContent').innerHTML = detailsHtml;
+            } else {
+                document.getElementById('donorDetailsContent').innerHTML = `
+                    <div class="loading-spinner" style="grid-column: 1 / -1; color: #dc3545;">
+                        <div class="spinner" style="border-color: rgba(220, 53, 69, 0.1); border-top-color: #dc3545;"></div>
+                        <h3 style="margin-bottom: 10px;">Error Loading Details</h3>
+                        <p>${result.error || 'Unable to load donor information'}</p>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            document.getElementById('donorDetailsContent').innerHTML = `
+                <div class="loading-spinner" style="grid-column: 1 / -1; color: #dc3545;">
+                    <div class="spinner" style="border-color: rgba(220, 53, 69, 0.1); border-top-color: #dc3545;"></div>
+                    <h3 style="margin-bottom: 10px;">Network Error</h3>
+                    <p>Failed to load donor details. Please check your connection.</p>
                 </div>
             `;
+        }
+    });
+});
+
+// Toggle eligibility
+document.querySelectorAll('.toggle-eligibility').forEach(button => {
+    button.addEventListener('click', async function() {
+        const donorId = this.getAttribute('data-donor-id');
+        const currentStatus = this.getAttribute('data-current-status') === 'true';
+        const newStatus = !currentStatus;
+        
+        if (confirm(`Are you sure you want to ${currentStatus ? 'disqualify' : 'qualify'} this donor?`)) {
+            const originalButton = this;
+            originalButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            originalButton.disabled = true;
             
             try {
-                // Fetch donor data from API
-                const response = await fetch('/staff/donors/' + donorId);
-                const result = await response.json();
-                
-                if (result.success) {
-                    const donor = result.donor;
-                    const bloodClass = donor.blood_type ? donor.blood_type.replace('+', 'pos').replace('-', 'neg') : 'unknown';
-                    
-                    modalBody.innerHTML = `
-                        <div class="text-center">
-                            <div class="avatar-circle-lg bg-danger text-white mx-auto mb-3">
-                                ${donor.donor_name ? donor.donor_name.charAt(0) : '?'}
-                            </div>
-                            <h4>${donor.donor_name || 'Unknown'}</h4>
-                            <p class="text-muted">ID: ${donor.id ? donor.id.slice(-6) : 'N/A'}</p>
-                        </div>
-                        
-                        <div class="row mt-4">
-                            <div class="col-md-6">
-                                <div class="card">
-                                    <div class="card-header bg-light">
-                                        <h6 class="mb-0"><i class="fas fa-user me-2"></i>Personal Information</h6>
-                                    </div>
-                                    <div class="card-body">
-                                        <p><strong>Name:</strong> ${donor.donor_name || 'Unknown'}</p>
-                                        <p><strong>Email:</strong> ${donor.email || 'No email'}</p>
-                                        <p><strong>Age:</strong> ${donor.age || 'N/A'}</p>
-                                        <p><strong>Blood Type:</strong> <span class="badge bg-danger">${donor.blood_type || 'Unknown'}</span></p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="card">
-                                    <div class="card-header bg-light">
-                                        <h6 class="mb-0"><i class="fas fa-stethoscope me-2"></i>Donation Information</h6>
-                                    </div>
-                                    <div class="card-body">
-                                        <p><strong>Eligibility:</strong> <span class="badge bg-${donor.eligibility_status ? 'success' : 'danger'}">${donor.eligibility_status ? 'Eligible' : 'Not Eligible'}</span></p>
-                                        <p><strong>Last Donation:</strong> ${donor.last_donation_date || 'Never'}</p>
-                                        <p><strong>Registration Date:</strong> ${donor.created_at ? new Date(donor.created_at).toLocaleDateString() : 'N/A'}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="card mt-3">
-                            <div class="card-header bg-light">
-                                <h6 class="mb-0"><i class="fas fa-file-medical me-2"></i>Medical History</h6>
-                            </div>
-                            <div class="card-body">
-                                <p>${donor.medical_history || 'No medical history provided.'}</p>
-                            </div>
-                        </div>
-                    `;
-                } else {
-                    modalBody.innerHTML = '<div class="alert alert-danger">Error: ' + result.error + '</div>';
-                }
-            } catch (error) {
-                console.error('Error fetching donor details:', error);
-                modalBody.innerHTML = '<div class="alert alert-danger">Error loading donor details.</div>';
-            }
-        });
-
-        // Send notification button
-        document.getElementById('sendNotificationBtn').addEventListener('click', function() {
-            alert('Notification sent to donor!');
-            const modal = bootstrap.Modal.getInstance(document.getElementById('viewDonorModal'));
-            modal.hide();
-        });
-
-        // Toggle eligibility
-        document.querySelectorAll('.toggle-eligibility').forEach(button => {
-            button.addEventListener('click', async function() {
-                const donorId = this.getAttribute('data-donor-id');
-                const currentStatus = this.getAttribute('data-current-status') === 'true';
-                const newStatus = !currentStatus;
-                
-                if (confirm(`Are you sure you want to ${currentStatus ? 'disqualify' : 'qualify'} this donor?`)) {
-                    const originalButton = this;
-                    originalButton.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-                    originalButton.disabled = true;
-                    
-                    try {
-                        const response = await fetch('/staff/donors/toggle-eligibility', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ donor_id: donorId, new_status: newStatus })
-                        });
-                        
-                        const result = await response.json();
-                        
-                        if (result.success) {
-                            if (newStatus) {
-                                originalButton.innerHTML = '<i class="fas fa-ban"></i>';
-                                originalButton.className = 'btn btn-sm btn-outline-danger toggle-eligibility';
-                                originalButton.setAttribute('data-current-status', 'true');
-                            } else {
-                                originalButton.innerHTML = '<i class="fas fa-check"></i>';
-                                originalButton.className = 'btn btn-sm btn-outline-success toggle-eligibility';
-                                originalButton.setAttribute('data-current-status', 'false');
-                            }
-                            
-                            const row = originalButton.closest('tr');
-                            const eligibilityCell = row.cells[4];
-                            
-                            if (newStatus) {
-                                eligibilityCell.innerHTML = '<span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Eligible</span>';
-                            } else {
-                                eligibilityCell.innerHTML = '<span class="badge bg-danger"><i class="fas fa-times-circle me-1"></i>Not Eligible</span>';
-                            }
-                            
-                            showToast('Donor eligibility updated!', 'success');
-                        } else {
-                            alert('Error: ' + result.error);
-                            originalButton.innerHTML = currentStatus ? '<i class="fas fa-ban"></i>' : '<i class="fas fa-check"></i>';
-                            originalButton.disabled = false;
-                        }
-                    } catch (error) {
-                        console.error('Error:', error);
-                        alert('An error occurred. Please try again.');
-                        originalButton.innerHTML = currentStatus ? '<i class="fas fa-ban"></i>' : '<i class="fas fa-check"></i>';
-                        originalButton.disabled = false;
-                    }
-                }
-            });
-        });
-
-        // Add donor form
-        document.getElementById('saveDonorBtn').addEventListener('click', async function() {
-            const form = document.getElementById('addDonorForm');
-            const button = this;
-            
-            if (!form.checkValidity()) {
-                form.reportValidity();
-                return;
-            }
-            
-            const formData = {
-                donor_name: form.querySelector('[name="donor_name"]').value,
-                email: form.querySelector('[name="email"]').value,
-                age: parseInt(form.querySelector('[name="age"]').value),
-                blood_type: form.querySelector('[name="blood_type"]').value,
-                eligibility_status: form.querySelector('[name="eligibility_status"]').value,
-                medical_history: form.querySelector('[name="medical_history"]').value
-            };
-            
-            button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
-            button.disabled = true;
-            
-            try {
-                const response = await fetch('/staff/donors/add', {
+                const response = await fetch('/staff/donors/toggle-eligibility', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(formData)
+                    body: JSON.stringify({ donor_id: donorId, new_status: newStatus })
                 });
                 
                 const result = await response.json();
                 
                 if (result.success) {
-                    const alertDiv = document.createElement('div');
-                    alertDiv.className = 'alert alert-success alert-dismissible fade show mt-3';
-                    alertDiv.innerHTML = `
-                        <i class="fas fa-check-circle me-2"></i>
-                        ${result.message}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    `;
-                    document.querySelector('.card-body').prepend(alertDiv);
+                    if (newStatus) {
+                        originalButton.innerHTML = '<i class="fas fa-ban"></i>';
+                        originalButton.style.color = '#dc3545';
+                        originalButton.setAttribute('data-current-status', 'true');
+                    } else {
+                        originalButton.innerHTML = '<i class="fas fa-check"></i>';
+                        originalButton.style.color = '#28a745';
+                        originalButton.setAttribute('data-current-status', 'false');
+                    }
                     
-                    const modal = bootstrap.Modal.getInstance(document.getElementById('addDonorModal'));
-                    modal.hide();
-                    form.reset();
+                    // Update the eligibility badge in table
+                    const row = originalButton.closest('tr');
+                    const eligibilityCell = row.cells[3];
                     
-                    setTimeout(() => {
-                        location.reload();
-                    }, 1500);
+                    if (newStatus) {
+                        eligibilityCell.innerHTML = '<span class="badge" style="background: #28a745; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.85rem;"><i class="fas fa-check-circle"></i> Eligible</span>';
+                    } else {
+                        eligibilityCell.innerHTML = '<span class="badge" style="background: #dc3545; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.85rem;"><i class="fas fa-times-circle"></i> Not Eligible</span>';
+                    }
+                    
+                    showToast('Donor eligibility updated!', 'success');
                 } else {
-                    alert('Error: ' + result.error);
-                    button.innerHTML = 'Save Donor';
-                    button.disabled = false;
+                    showToast('Error: ' + result.error, 'error');
+                    originalButton.innerHTML = currentStatus ? '<i class="fas fa-ban"></i>' : '<i class="fas fa-check"></i>';
+                    originalButton.disabled = false;
                 }
             } catch (error) {
                 console.error('Error:', error);
-                alert('An error occurred while saving donor. Please try again.');
-                button.innerHTML = 'Save Donor';
-                button.disabled = false;
+                showToast('An error occurred. Please try again.', 'error');
+                originalButton.innerHTML = currentStatus ? '<i class="fas fa-ban"></i>' : '<i class="fas fa-check"></i>';
+                originalButton.disabled = false;
             }
-        });
-
-        // Show toast notification
-        function showToast(message, type = 'info') {
-            // Create toast element if it doesn't exist
-            let toastContainer = document.getElementById('toastContainer');
-            if (!toastContainer) {
-                toastContainer = document.createElement('div');
-                toastContainer.id = 'toastContainer';
-                toastContainer.className = 'toast-container position-fixed bottom-0 end-0 p-3';
-                document.body.appendChild(toastContainer);
-            }
-            
-            const toastId = 'toast-' + Date.now();
-            const toastHtml = `
-                <div id="${toastId}" class="toast align-items-center text-bg-${type} border-0" role="alert">
-                    <div class="d-flex">
-                        <div class="toast-body">
-                            ${message}
-                        </div>
-                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-                    </div>
-                </div>
-            `;
-            
-            toastContainer.innerHTML += toastHtml;
-            const toastElement = document.getElementById(toastId);
-            const toast = new bootstrap.Toast(toastElement);
-            toast.show();
-            
-            toastElement.addEventListener('hidden.bs.toast', function() {
-                this.remove();
-            });
         }
-    </script>
+    });
+});
+</script>
 </body>
 </html>
