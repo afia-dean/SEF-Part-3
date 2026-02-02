@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Analytics & Logs - BloodLink</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style_combined.css') }}">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">🩸 BloodLink <small class="muted">Admin Panel</small></div>
+      <div class="nav">
+        <a href="{{ url_for('dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('blood_management') }}">Blood Management</a>
+        <a href="{{ url_for('blood_requests') }}">Blood Requests</a>
+        <a href="{{ url_for('manage_users') }}">Manage Users</a>
+        <a href="{{ url_for('analytics') }}">Analytics & Logs</a>
+        <a href="{{ url_for('logout') }}">Logout</a>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <h1 class="page-title">Analytics & Logs</h1>
+        <div class="muted small">Tables and audit logs (no graphs)</div>
+      </div>
+
+      <div class="grid">
+        <div class="stat"><h3>Total Users</h3><p>{{ counts.total_users }}</p></div>
+        <div class="stat"><h3>Active Users</h3><p>{{ counts.active_users }}</p></div>
+        <div class="stat"><h3>Pending Requests</h3><p>{{ counts.pending_requests }}</p></div>
+        <div class="stat"><h3>Total Inventory (ml)</h3><p>{{ counts.total_inventory_ml }}</p></div>
+      </div>
+
+      <div class="grid" style="grid-template-columns: 1fr 1fr;">
+        <div class="card">
+          <h3 style="margin-top:0;">Low Stock List</h3>
+          {% if low_stock %}
+          <table class="table">
+            <thead><tr><th>Blood Type</th><th>Qty (ml)</th></tr></thead>
+            <tbody>
+              {% for item in low_stock %}
+              <tr>
+                <td><b>{{ item.blood_type }}</b></td>
+                <td><span class="badge red">{{ item.quantity_ml }}</span></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+          <p class="muted">No low stock items.</p>
+          {% endif %}
+        </div>
+
+        <div class="card">
+          <h3 style="margin-top:0;">Pending Requests</h3>
+          {% if pending_requests %}
+          <table class="table">
+            <thead><tr><th>Requester</th><th>Type</th><th>Qty</th></tr></thead>
+            <tbody>
+              {% for r in pending_requests %}
+              <tr>
+                <td><b>{{ r.requester }}</b></td>
+                <td>{{ r.blood_type }}</td>
+                <td>{{ r.quantity_ml }} ml</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+          <p class="muted">No pending requests.</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0;">Inventory Audit Logs</h3>
+        <p class="muted small">
+          Designed to match best practice: <b>inventory_logs</b> table + trigger (PostgreSQL/Supabase).
+        </p>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Action</th><th>Inventory ID</th><th>Old Qty</th><th>New Qty</th><th>Changed By</th><th>Changed At</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for log in inv_logs %}
+            <tr>
+              <td><span class="badge blue">{{ log.action }}</span></td>
+              <td>{{ log.inventory_id }}</td>
+              <td>{{ log.old_quantity }}</td>
+              <td>{{ log.new_quantity }}</td>
+              <td>{{ log.changed_by }}</td>
+              <td class="small">{{ log.changed_at }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0;">Request Audit Logs</h3>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Action</th><th>Request ID</th><th>Old Status</th><th>New Status</th><th>Changed By</th><th>Changed At</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for log in req_logs %}
+            <tr>
+              <td><span class="badge gray">{{ log.action }}</span></td>
+              <td>{{ log.request_id }}</td>
+              <td>{{ log.old_status }}</td>
+              <td>{{ log.new_status }}</td>
+              <td>{{ log.changed_by }}</td>
+              <td class="small">{{ log.changed_at }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+    </main>
+  </div>
+</body>
+</html>

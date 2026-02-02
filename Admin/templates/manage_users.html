@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BloodLink | Manage Users</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style_combined.css') }}">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">🩸 BloodLink <small class="muted">Admin Panel</small></div>
+      <div class="nav">
+        <a href="{{ url_for('dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('blood_management') }}">Blood Management</a>
+        <a href="{{ url_for('blood_requests') }}">Blood Requests</a>
+        <a class="active" href="{{ url_for('manage_users') }}">Manage Users</a>
+        <a href="{{ url_for('analytics') }}">Analytics & Logs</a>
+        <a href="{{ url_for('logout') }}">Logout</a>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <h1 class="page-title">Manage Users</h1>
+        <div class="muted small">Create, update, suspend, and remove admins</div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0;">Add New Admin</h3>
+        <form method="POST" class="form">
+          <div class="form-row">
+            <input class="input" name="name" placeholder="Full name" required>
+            <input class="input" name="role" placeholder="Role (e.g., System Admin)" required>
+            <select name="status">
+              <option value="Active" selected>Active</option>
+              <option value="Suspended">Suspended</option>
+            </select>
+          </div>
+          <div style="height:12px;"></div>
+          <button class="btn" type="submit">Add Admin</button>
+        </form>
+      </div>
+
+      <div style="height:16px;"></div>
+
+      <div class="card">
+        <h3 style="margin-top:0;">Admins</h3>
+
+        {% if users and users|length > 0 %}
+        <div style="overflow:auto;">
+          <table class="table" style="width:100%; border-collapse: collapse;">
+            <thead>
+              <tr>
+                <th style="text-align:left; padding:10px;">ID</th>
+                <th style="text-align:left; padding:10px;">Name</th>
+                <th style="text-align:left; padding:10px;">Role</th>
+                <th style="text-align:left; padding:10px;">Status</th>
+                <th style="text-align:left; padding:10px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for user in users %}
+              <tr>
+                <td style="padding:10px;">{{ user['id'] }}</td>
+                <td style="padding:10px;">{{ user['name'] }}</td>
+                <td style="padding:10px;">{{ user['role'] }}</td>
+                <td style="padding:10px;">
+                  {% if user['status'] == 'Active' %}
+                    <span class="badge success">Active</span>
+                  {% else %}
+                    <span class="badge danger">Suspended</span>
+                  {% endif %}
+                </td>
+                <td style="padding:10px; white-space:nowrap;">
+                  <a class="btn light" href="{{ url_for('edit_user', user_id=user['id']) }}">Edit</a>
+                  <a class="btn light" href="{{ url_for('toggle_user', user_id=user['id']) }}">
+                    {% if user['status'] == 'Active' %}Suspend{% else %}Activate{% endif %}
+                  </a>
+                  <a class="btn danger" href="{{ url_for('delete_user', user_id=user['id']) }}"
+                     onclick="return confirm('Delete this user?');">Delete</a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+          <div class="muted">No users found.</div>
+        {% endif %}
+      </div>
+    </main>
+  </div>
+</body>
+</html>

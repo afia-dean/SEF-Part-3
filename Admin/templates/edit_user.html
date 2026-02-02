@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Edit Admin - BloodLink</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style_combined.css') }}">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">🩸 BloodLink <small class="muted">Admin Panel</small></div>
+      <div class="nav">
+        <a href="{{ url_for('dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('blood_management') }}">Blood Management</a>
+        <a href="{{ url_for('blood_requests') }}">Blood Requests</a>
+        <a href="{{ url_for('manage_users') }}">Manage Users</a>
+        <a href="{{ url_for('analytics') }}">Analytics & Logs</a>
+        <a href="{{ url_for('logout') }}">Logout</a>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <h1 class="page-title">Edit Admin</h1>
+        <div class="muted small">Update admin information</div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0;">Edit Admin</h3>
+        <form method="POST">
+          <div class="form-row">
+            <input class="input" name="name" value="{{ user['name'] }}" required>
+            <input class="input" name="role" value="{{ user['role'] }}" required>
+            <select name="status">
+              <option value="Active" {% if user['status'] == "Active" %}selected{% endif %}>Active</option>
+              <option value="Suspended" {% if user['status'] == "Suspended" %}selected{% endif %}>Suspended</option>
+            </select>
+          </div>
+          <div style="height:12px;"></div>
+          <div class="actions">
+            <button class="btn" type="submit">Save Changes</button>
+            <a class="btn light" href="{{ url_for('manage_users') }}">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </main>
+  </div>
+</body>
+</html>
