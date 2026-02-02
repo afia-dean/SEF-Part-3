@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Blood Requests - BloodLink</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style_combined.css') }}">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">🩸 BloodLink <small class="muted">Admin Panel</small></div>
+      <div class="nav">
+        <a href="{{ url_for('dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('blood_management') }}">Blood Management</a>
+        <a href="{{ url_for('blood_requests') }}">Blood Requests</a>
+        <a href="{{ url_for('manage_users') }}">Manage Users</a>
+        <a href="{{ url_for('analytics') }}">Analytics & Logs</a>
+        <a href="{{ url_for('logout') }}">Logout</a>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <h1 class="page-title">Blood Requests</h1>
+        <div class="muted small">Create requests and manage status</div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0;">Create New Request</h3>
+        <form method="POST">
+          <div class="form-row">
+            <input class="input" name="requester" placeholder="Requester (Hospital/Clinic)" required>
+            <input class="input" name="blood_type" placeholder="Blood Type (e.g., O+)" required>
+            <input class="input" type="number" name="quantity_ml" min="1" placeholder="Quantity (ml)" required>
+          </div>
+          <div style="height:10px;"></div>
+          <button class="btn success" type="submit">+ Create Request</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0;">Requests Table</h3>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>ID</th><th>Requester</th><th>Blood Type</th><th>Quantity</th>
+              <th>Status</th><th>Created</th><th style="width:340px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in requests %}
+            <tr>
+              <td>{{ r.id }}</td>
+              <td><b>{{ r.requester }}</b></td>
+              <td>{{ r.blood_type }}</td>
+              <td>{{ r.quantity_ml }} ml</td>
+              <td>
+                {% if r.status == "Pending" %}
+                  <span class="badge yellow">Pending</span>
+                {% elif r.status == "Approved" %}
+                  <span class="badge blue">Approved</span>
+                {% else %}
+                  <span class="badge green">Fulfilled</span>
+                {% endif %}
+              </td>
+              <td class="small">{{ r.created_at }}</td>
+              <td>
+                <div class="actions">
+                  <a class="btn light" href="{{ url_for('update_request_status', req_id=r.id, new_status='Pending') }}">Pending</a>
+                  <a class="btn warn" href="{{ url_for('update_request_status', req_id=r.id, new_status='Approved') }}">Approve</a>
+                  <a class="btn success" href="{{ url_for('update_request_status', req_id=r.id, new_status='Fulfilled') }}">Fulfill</a>
+                  <a class="btn danger" href="{{ url_for('delete_request', req_id=r.id) }}"
+                     onclick="return confirm('Delete this request?');">Delete</a>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+    </main>
+  </div>
+</body>
+</html>
