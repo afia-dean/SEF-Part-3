@@ -215,7 +215,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 if (response.ok) {
                     alert('Successfully registered for the event!');
-                    window.location.reload(); // Reload to update UI
+                    window.location.reload();
                 } else {
                     alert('Error: ' + (result.error || 'Failed to register'));
                     this.innerHTML = originalText;
