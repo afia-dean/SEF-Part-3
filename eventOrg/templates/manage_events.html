@@ -1,0 +1,219 @@
+<!-- templates/manage_events.html -->
+{% extends "base.html" %}
+
+{% block title %}Manage Events{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h1 class="page-title">Manage Events</h1>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
+        <p>Create and manage blood donation events</p>
+        <button onclick="openCreateEventModal()" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Create New Event
+        </button>
+    </div>
+</div>
+
+<!-- Events Table -->
+<div class="table-container fade-in">
+    <div class="table-header">
+        <h3><i class="fas fa-calendar-alt"></i> All Events</h3>
+        <div>
+            <select id="statusFilter" class="form-control" style="width: auto; display: inline-block; margin-right: 10px;" onchange="filterEvents()">
+                <option value="all">All Status</option>
+                <option value="Upcoming">Upcoming</option>
+                <option value="Ongoing">Ongoing</option>
+                <option value="Completed">Completed</option>
+                <option value="Cancelled">Cancelled</option>
+            </select>
+        </div>
+    </div>
+    
+    {% if events %}
+    <table id="eventsTable">
+        <thead>
+            <tr>
+                <th>Event Name</th>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Location</th>
+                <th>Status</th>
+                <th>Registrations</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for event in events %}
+            <tr data-status="{{ event.status }}">
+                <td>{{ event.event_name }}</td>
+                <td>{{ event.event_date }}</td>
+                <td>{{ event.event_time }}</td>
+                <td>{{ event.location }}</td>
+                <td>
+                    <span class="status-badge status-{{ event.status.lower() }}">
+                        {{ event.status }}
+                    </span>
+                </td>
+                <td>{{ event.registration_count or 0 }}</td>
+                <td>
+                    <div style="display: flex; gap: 5px;">
+                        <a href="{{ url_for('view_event', event_id=event.id) }}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-eye"></i>
+                        </a>
+                        <button onclick="editEvent('{{ event.id }}')" class="btn btn-warning btn-sm">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        {% if event.status == 'Upcoming' %}
+                        <button onclick="updateEventStatus('{{ event.id }}', 'Cancelled')" class="btn btn-danger btn-sm">
+                            <i class="fas fa-times"></i>
+                        </button>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div style="padding: 3rem; text-align: center; color: var(--dark-gray);">
+        <i class="fas fa-calendar-times" style="font-size: 4rem; margin-bottom: 1rem;"></i>
+        <h3>No Events Created Yet</h3>
+        <p>Start by creating your first blood donation event!</p>
+        <button onclick="openCreateEventModal()" class="btn btn-primary" style="margin-top: 1rem;">
+            <i class="fas fa-plus"></i> Create Your First Event
+        </button>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Create/Edit Event Modal -->
+<div id="eventModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="modalTitle">Create New Event</h2>
+            <button class="modal-close" onclick="closeEventModal()">&times;</button>
+        </div>
+        <form id="eventForm" method="POST" action="{{ url_for('save_event') }}">
+            <input type="hidden" id="eventId" name="event_id">
+            
+            <div class="form-group">
+                <label for="event_name">Event Name *</label>
+                <input type="text" id="event_name" name="event_name" class="form-control" required>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="event_date">Date *</label>
+                    <input type="date" id="event_date" name="event_date" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="event_time">Time *</label>
+                    <input type="time" id="event_time" name="event_time" class="form-control" required>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="location">Location *</label>
+                <input type="text" id="location" name="location" class="form-control" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="description">Description</label>
+                <textarea id="description" name="description" class="form-control" rows="3"></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label for="target_goal">Target Goal (Number of Donors)</label>
+                <input type="number" id="target_goal" name="target_goal" class="form-control" min="0">
+            </div>
+            
+            <div class="form-group">
+                <label for="status">Status</label>
+                <select id="status" name="status" class="form-control">
+                    <option value="Upcoming">Upcoming</option>
+                    <option value="Ongoing">Ongoing</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Cancelled">Cancelled</option>
+                </select>
+            </div>
+            
+            <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+                <button type="submit" class="btn btn-primary" style="flex: 1;">
+                    Save Event
+                </button>
+                <button type="button" class="btn btn-secondary" style="flex: 1;" onclick="closeEventModal()">
+                    Cancel
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openCreateEventModal() {
+    document.getElementById('modalTitle').textContent = 'Create New Event';
+    document.getElementById('eventForm').reset();
+    document.getElementById('eventId').value = '';
+    document.getElementById('eventModal').style.display = 'flex';
+}
+
+function editEvent(eventId) {
+    // In a real implementation, you would fetch event data via AJAX
+    // For now, we'll show a simple form
+    document.getElementById('modalTitle').textContent = 'Edit Event';
+    document.getElementById('eventId').value = eventId;
+    document.getElementById('eventModal').style.display = 'flex';
+}
+
+function closeEventModal() {
+    document.getElementById('eventModal').style.display = 'none';
+}
+
+function filterEvents() {
+    const filterValue = document.getElementById('statusFilter').value;
+    const rows = document.querySelectorAll('#eventsTable tbody tr');
+    
+    rows.forEach(row => {
+        if (filterValue === 'all' || row.getAttribute('data-status') === filterValue) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+function updateEventStatus(eventId, status) {
+    if (confirm(`Are you sure you want to mark this event as ${status}?`)) {
+        fetch(`/event/${eventId}/status`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ status: status })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Failed to update event status');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to update event status');
+        });
+    }
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    const modal = document.getElementById('eventModal');
+    if (event.target === modal) {
+        closeEventModal();
+    }
+}
+</script>
+{% endblock %}

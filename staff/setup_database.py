@@ -175,9 +175,9 @@ def setup_database():
             # Create organizer profile
             org_profile = {
                 'user_id': org_user_id,
-                'organiser_name': 'Event Coordinator'
+                'organizer_name': 'Event Coordinator'
             }
-            supabase.table('event_organisers').upsert(org_profile).execute()
+            supabase.table('event_organizers').upsert(org_profile).execute()
             
             # Create sample event
             sample_event = {
