@@ -6,12 +6,12 @@
 {% block content %}
 <div class="dashboard-header">
     <h1 class="page-title">Track Event Attendance</h1>
-    <p class="subtitle">Monitor attendance rates across all your events</p>
+    <p>Monitor attendance rates across all your events</p>
 </div>
 
 <!-- Attendance Summary -->
 <div class="dashboard-cards">
-    <div class="card fade-in">
+    <div class="card">
         <div class="card-icon">
             <i class="fas fa-calendar-check"></i>
         </div>
@@ -19,7 +19,7 @@
         <div class="card-value">{{ attendance_data|length }}</div>
     </div>
     
-    <div class="card fade-in delay-1">
+    <div class="card">
         <div class="card-icon">
             <i class="fas fa-user-friends"></i>
         </div>
@@ -27,7 +27,7 @@
         <div class="card-value">{{ attendance_data|sum(attribute='total_registrations') }}</div>
     </div>
     
-    <div class="card fade-in delay-2">
+    <div class="card">
         <div class="card-icon">
             <i class="fas fa-user-check"></i>
         </div>
@@ -35,7 +35,7 @@
         <div class="card-value">{{ attendance_data|sum(attribute='attended') }}</div>
     </div>
     
-    <div class="card fade-in delay-3">
+    <div class="card">
         <div class="card-icon">
             <i class="fas fa-chart-line"></i>
         </div>
@@ -51,7 +51,7 @@
 </div>
 
 <!-- Attendance Table -->
-<div class="table-container fade-in delay-4">
+<div class="table-container">
     <div class="table-header">
         <h3><i class="fas fa-clipboard-list"></i> Event Attendance Details</h3>
     </div>
@@ -78,13 +78,16 @@
                 <td>{{ event.attended }}</td>
                 <td>{{ event.total_registrations - event.attended }}</td>
                 <td>
-                    <div class="attendance-bar-container">
-                        <span>{{ "%.1f"|format(event.attendance_rate) }}%</span>
-                        <div class="attendance-bar-bg">
-                            <div class="attendance-bar-fill" 
-                                 style="width: {{ event.attendance_rate }}%;
-                                        background-color: {% if event.attendance_rate >= 70 %}#4caf50{% elif event.attendance_rate >= 50 %}#ff9800{% else %}#f44336{% endif %};">
-                            </div>
+                    <div class="attendance-display">
+                        <span class="attendance-percent">{{ "%.1f"|format(event.attendance_rate) }}%</span>
+                        <div class="attendance-container">
+                            {% if event.attendance_rate >= 70 %}
+                            <div class="attendance-bar good-bar" data-width="{{ event.attendance_rate }}"></div>
+                            {% elif event.attendance_rate >= 50 %}
+                            <div class="attendance-bar fair-bar" data-width="{{ event.attendance_rate }}"></div>
+                            {% else %}
+                            <div class="attendance-bar poor-bar" data-width="{{ event.attendance_rate }}"></div>
+                            {% endif %}
                         </div>
                     </div>
                 </td>
@@ -114,102 +117,41 @@
 </div>
 
 <!-- Attendance Tips -->
-<div class="card fade-in delay-5">
+<div class="card tips-section">
     <h3><i class="fas fa-lightbulb"></i> Tips for Improving Attendance</h3>
-    <div class="tips-list">
-        <ul>
-            <li>
+    <div class="tips-content">
+        <ul class="tips-list">
+            <li class="tip-item">
                 <i class="fas fa-bell tip-icon"></i>
                 Send reminder notifications 24-48 hours before the event
             </li>
-            <li>
+            <li class="tip-item">
                 <i class="fas fa-gift tip-icon"></i>
                 Offer incentives or certificates for regular donors
             </li>
-            <li>
+            <li class="tip-item">
                 <i class="fas fa-map-marker-alt tip-icon"></i>
                 Choose convenient locations with good accessibility
             </li>
-            <li>
+            <li class="tip-item">
                 <i class="fas fa-clock tip-icon"></i>
                 Schedule events at optimal times (weekends, evenings)
             </li>
-            <li>
+            <li class="tip-item">
                 <i class="fas fa-comments tip-icon"></i>
                 Follow up with no-shows and get feedback
             </li>
         </ul>
     </div>
 </div>
-{% endblock %}
 
-{% block styles %}
-<style>
-    .delay-1 {
-        animation-delay: 0.1s;
-    }
-    
-    .delay-2 {
-        animation-delay: 0.2s;
-    }
-    
-    .delay-3 {
-        animation-delay: 0.3s;
-    }
-    
-    .delay-4 {
-        animation-delay: 0.4s;
-    }
-    
-    .delay-5 {
-        animation-delay: 0.5s;
-    }
-    
-    .attendance-bar-container {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-    
-    .attendance-bar-bg {
-        flex-grow: 1;
-        background-color: #e0e0e0;
-        height: 8px;
-        border-radius: 4px;
-    }
-    
-    .attendance-bar-fill {
-        height: 100%;
-        border-radius: 4px;
-    }
-    
-    .empty-state {
-        padding: 3rem;
-        text-align: center;
-        color: var(--dark-gray);
-    }
-    
-    .empty-icon {
-        font-size: 4rem;
-        margin-bottom: 1rem;
-        color: var(--primary-red);
-    }
-    
-    .tips-list ul {
-        list-style-type: none;
-        padding: 0;
-    }
-    
-    .tips-list li {
-        margin-bottom: 0.5rem;
-        padding-left: 1.5rem;
-        position: relative;
-    }
-    
-    .tip-icon {
-        position: absolute;
-        left: 0;
-        color: var(--primary-red);
-    }
-</style>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Set the width of attendance bars dynamically using JavaScript
+    document.querySelectorAll('.attendance-bar').forEach(function(bar) {
+        const width = bar.getAttribute('data-width');
+        bar.style.width = width + '%';
+    });
+});
+</script>
 {% endblock %}

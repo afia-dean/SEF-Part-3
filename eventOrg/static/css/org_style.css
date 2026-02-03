@@ -477,3 +477,81 @@ tbody tr:hover {
 .dashboard-header {
     margin-bottom: 2rem;
 }
+
+/* Add these styles to static/css/style.css */
+
+/* Attendance display styles */
+.attendance-display {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.attendance-percent {
+    min-width: 50px;
+}
+
+.attendance-container {
+    flex-grow: 1;
+    background-color: #e0e0e0;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.attendance-bar {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.good-bar {
+    background-color: #4caf50;
+}
+
+.fair-bar {
+    background-color: #ff9800;
+}
+
+.poor-bar {
+    background-color: #f44336;
+}
+
+/* Empty state styles */
+.empty-state {
+    padding: 3rem;
+    text-align: center;
+    color: #616161;
+}
+
+.empty-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    color: #d32f2f;
+}
+
+/* Tips section */
+.tips-section {
+    margin-top: 2rem;
+}
+
+.tips-content {
+    margin-top: 1rem;
+}
+
+.tips-list {
+    list-style-type: none;
+    padding: 0;
+}
+
+.tip-item {
+    margin-bottom: 0.5rem;
+    padding-left: 1.5rem;
+    position: relative;
+}
+
+.tip-icon {
+    position: absolute;
+    left: 0;
+    color: #d32f2f;
+}
