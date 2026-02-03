@@ -1,10 +1,13 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_file
 from flask_cors import CORS
 import os
 from dotenv import load_dotenv
 from supabase import create_client, Client
 import hashlib
 from datetime import datetime
+import csv
+from io import StringIO
+from functools import wraps
 
 # Load environment variables
 load_dotenv()
@@ -20,6 +23,23 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
+
+# ========== ROLE-BASED ACCESS CONTROL ==========
+def role_required(required_role):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if 'user_id' not in session:
+                flash('Please login first', 'error')
+                return redirect(url_for('login'))
+            
+            if session.get('role') != required_role:
+                flash(f'Unauthorized access. {required_role.capitalize()} role required.', 'error')
+                return redirect(url_for('login'))
+            
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
 
 # ========== AUTHENTICATION ==========
 @app.route('/login', methods=['GET', 'POST'])
@@ -59,8 +79,17 @@ def login():
                     else:
                         flash('Donor record not found. Please contact support.', 'error')
                 elif user['role'] == 'organizer':
-                    flash('Login successful!', 'success')
-                    return redirect(url_for('organizer_dashboard'))
+
+                    organizer_response = supabase.table('organizer').select('*').eq('user_id', user['id']).execute()
+                    
+                    if organizer_response.data:
+                        organizer = organizer_response.data[0]
+                        session['organizer_id'] = organizer['id']
+                        session['organizer_name'] = organizer.get('organizer_name', organizer.get('full_name', 'Organizer'))
+                        flash('Login successful!', 'success')
+                        return redirect(url_for('organizer_dashboard'))
+                    else:
+                        flash('Organizer record not found. Please contact support.', 'error')
                 elif user['role'] == 'admin':
                     flash('Login successful!', 'success')
                     return redirect(url_for('admin_dashboard'))
@@ -68,6 +97,7 @@ def login():
                 flash('Invalid email or password', 'error')
                 
         except Exception as e:
+            print(f"Login error: {e}")
             flash('Login failed. Please try again.', 'error')
     
     return render_template('login.html')
@@ -135,9 +165,18 @@ def register():
                 
                 supabase.table('donors').insert(donor_data).execute()
             
+            elif role == 'organizer':
+                # Create organizer record in organizers table
+                supabase.table('organizers').insert({
+                    'user_id': user_id,
+                    'organizer_name': full_name,
+                    'email': email,
+                    'created_at': datetime.now().isoformat()
+                }).execute()
+            
             flash('Registration successful! Please login.', 'success')
             return redirect(url_for('login'))
-            
+                        
         except Exception as e:
             flash('Registration failed. Please try again.', 'error')
     
@@ -164,10 +203,8 @@ def index():
     return redirect(url_for('login'))
 
 @app.route('/staff/dashboard')
+@role_required('staff')
 def staff_dashboard():
-    if 'user_id' not in session or session.get('role') != 'staff':
-        return redirect(url_for('login'))
-    
     try:
         staff_response = supabase.table('staff').select('*').eq('user_id', session['user_id']).execute()
         
@@ -204,10 +241,8 @@ def staff_dashboard():
 
 # ========== DONOR ROUTES ==========
 @app.route('/donor/dashboard')
+@role_required('donor')
 def donor_dashboard():
-    if 'user_id' not in session or session.get('role') != 'donor':
-        return redirect(url_for('login'))
-    
     try:
         donor_response = supabase.table('donors').select('*').eq('user_id', session['user_id']).execute()
         
@@ -242,7 +277,7 @@ def donor_dashboard():
                                 'event': event,
                                 'status': registration.get('status', 'Pending'),
                                 'registered_at': registration.get('registered_at'),
-                                'check_in_time': registration.get('registered_at')  # Use registered_at for display
+                                'check_in_time': registration.get('registered_at')
                             }
                             appointments.append(appointment)
         except Exception as e:
@@ -275,99 +310,9 @@ def donor_dashboard():
         flash('Error loading dashboard', 'error')
         return redirect(url_for('login'))
 
-def donor_appointment():
-    if 'user_id' not in session or session.get('role') != 'donor':
-        return redirect(url_for('login'))
-    
-    try:
-        donor_response = supabase.table('donors').select('*').eq('user_id', session['user_id']).execute()
-        if not donor_response.data:
-            flash('Donor record not found', 'error')
-            return redirect(url_for('logout'))
-        
-        donor = donor_response.data[0]
-        
-        # Get UPCOMING events from events table
-        today = datetime.now().date().isoformat()
-        events_response = supabase.table('events')\
-            .select('*')\
-            .gte('event_date', today)\
-            .eq('status', 'Upcoming')\
-            .order('event_date')\
-            .execute()
-        
-        events = events_response.data if events_response.data else []
-        
-        # Get existing registrations
-        profile_response = supabase.table('profiles').select('*').eq('id', session['user_id']).execute()
-        
-        registered_event_ids = []
-        if profile_response.data:
-            profile = profile_response.data[0]
-            registrations_response = supabase.table('registrations')\
-                .select('event_id')\
-                .eq('donor_id', profile['id'])\
-                .execute()
-            
-            if registrations_response.data:
-                registered_event_ids = [reg['event_id'] for reg in registrations_response.data]
-        
-        # Mark which events user is already registered for
-        for event in events:
-            event['already_registered'] = event['id'] in registered_event_ids
-        
-        if request.method == 'POST':
-            try:
-                data = request.get_json()
-                event_id = data.get('event_id')
-                
-                if not event_id:
-                    return jsonify({'success': False, 'error': 'Event ID required'}), 400
-                
-                if not profile_response.data:
-                    return jsonify({'success': False, 'error': 'Profile not found'}), 400
-                
-                profile = profile_response.data[0]
-                
-                # Check if already registered
-                existing_registration = supabase.table('registrations')\
-                    .select('*')\
-                    .eq('donor_id', profile['id'])\
-                    .eq('event_id', event_id)\
-                    .execute()
-                
-                if existing_registration.data:
-                    return jsonify({'success': False, 'error': 'Already registered for this event'}), 400
-                
-                # Create registration
-                registration_response = supabase.table('registrations').insert({
-                    'donor_id': profile['id'],
-                    'event_id': event_id,
-                    'status': 'Pending',
-                    'registered_at': datetime.now().isoformat()
-                }).execute()
-                
-                return jsonify({'success': True, 'message': 'Successfully registered for event!'})
-                
-            except Exception as e:
-                print(f"Error registering for event: {e}")
-                return jsonify({'success': False, 'error': str(e)}), 500
-        
-        return render_template('appointment.html',
-                             donor=donor,
-                             events=events,
-                             registered_event_ids=registered_event_ids)
-        
-    except Exception as e:
-        print(f"Error loading appointments: {e}")
-        flash('Error loading appointments', 'error')
-        return redirect(url_for('donor_dashboard'))
-    
 @app.route('/donor/appointment', methods=['GET', 'POST'])
+@role_required('donor')
 def donor_appointment():
-    if 'user_id' not in session or session.get('role') != 'donor':
-        return redirect(url_for('login'))
-    
     try:
         donor_response = supabase.table('donors').select('*').eq('user_id', session['user_id']).execute()
         if not donor_response.data:
@@ -454,7 +399,7 @@ def donor_appointment():
                 
                 # Create registration using user_id from session
                 registration_response = supabase.table('registrations').insert({
-                    'donor_id': session['user_id'],  # This is users.id
+                    'donor_id': session['user_id'],
                     'event_id': event_id,
                     'status': 'Pending',
                     'registered_at': datetime.now().isoformat()
@@ -477,12 +422,9 @@ def donor_appointment():
         return redirect(url_for('donor_dashboard'))
 
 @app.route('/donor/eligibility')
+@role_required('donor')
 def donor_eligibility():
-    if 'user_id' not in session or session.get('role') != 'donor':
-        return redirect(url_for('login'))
-    
     try:
-        # Get donor for sidebar
         donor_response = supabase.table('donors').select('*').eq('user_id', session['user_id']).execute()
         
         if not donor_response.data:
@@ -491,7 +433,6 @@ def donor_eligibility():
         
         donor = donor_response.data[0]
         
-        # Get unread notifications count - handle if table doesn't exist
         unread_notifications = 0
         try:
             unread_response = supabase.table('notifications').select('*', count='exact').eq('status', False).execute()
@@ -511,10 +452,8 @@ def donor_eligibility():
         return redirect(url_for('donor_dashboard'))
 
 @app.route('/donor/eligibility/check')
+@role_required('donor')
 def check_eligibility():
-    if 'user_id' not in session or session.get('role') != 'donor':
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    
     try:
         donor_response = supabase.table('donors').select('*').eq('user_id', session['user_id']).execute()
         
@@ -527,7 +466,6 @@ def check_eligibility():
         reason = donor.get('disqualification_reason', '')
         last_donation = donor.get('last_donation_date')
         
-        # Handle date serialization
         if last_donation:
             if isinstance(last_donation, datetime):
                 last_donation_str = last_donation.isoformat()
@@ -553,16 +491,13 @@ def check_eligibility():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/donor/medical')
+@role_required('donor')
 def donor_medical():
-    if 'user_id' not in session or session.get('role') != 'donor':
-        return redirect(url_for('login'))
     return render_template('medical.html')
 
 @app.route('/donor/medical/get')
+@role_required('donor')
 def get_medical_info():
-    if 'user_id' not in session or session.get('role') != 'donor':
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    
     try:
         donor_response = supabase.table('donors').select('medical_history, medical_notes').eq('user_id', session['user_id']).execute()
         
@@ -577,10 +512,8 @@ def get_medical_info():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/donor/medical/save', methods=['POST'])
+@role_required('donor')
 def save_medical_info():
-    if 'user_id' not in session or session.get('role') != 'donor':
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    
     try:
         data = request.get_json()
         medical_history = data.get('medical_history', '')
@@ -596,22 +529,17 @@ def save_medical_info():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/donor/notifications')
+@role_required('donor')
 def donor_notifications():
-    if 'user_id' not in session or session.get('role') != 'donor':
-        return redirect(url_for('login'))
     return render_template('notifications.html')
 
 @app.route('/donor/notifications/all')
+@role_required('donor')
 def get_donor_notifications():
-    if 'user_id' not in session or session.get('role') != 'donor':
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    
     try:
-        # Get notifications - no created_at column, so we can't order by it
         notifications_response = supabase.table('notifications').select('*').execute()
         
         if notifications_response.data:
-            # Format the notifications to match what the template expects
             formatted_notifications = []
             for notification in notifications_response.data:
                 formatted_notifications.append({
@@ -620,7 +548,7 @@ def get_donor_notifications():
                     'message': notification.get('message', ''),
                     'status': 'read' if notification.get('status') else 'unread',
                     'read': notification.get('status', False),
-                    'created_at': datetime.now().isoformat()  # Default value since no timestamp
+                    'created_at': datetime.now().isoformat()
                 })
             
             return jsonify({
@@ -638,10 +566,8 @@ def get_donor_notifications():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/donor/notifications/mark-read', methods=['POST'])
+@role_required('donor')
 def mark_notification_read():
-    if 'user_id' not in session or session.get('role') != 'donor':
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    
     try:
         data = request.get_json()
         notification_id = data.get('notification_id')
@@ -650,7 +576,7 @@ def mark_notification_read():
             return jsonify({'success': False, 'error': 'Notification ID required'}), 400
         
         response = supabase.table('notifications').update({
-            'status': True  # status column acts as read flag
+            'status': True
         }).eq('id', notification_id).execute()
         
         return jsonify({'success': True, 'message': 'Notification marked as read'})
@@ -660,12 +586,9 @@ def mark_notification_read():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/donor/notifications/mark-all-read', methods=['POST'])
+@role_required('donor')
 def mark_all_notifications_read():
-    if 'user_id' not in session or session.get('role') != 'donor':
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    
     try:
-        # Mark all notifications as read (set status = True)
         response = supabase.table('notifications').update({
             'status': True
         }).eq('status', False).execute()
@@ -676,41 +599,498 @@ def mark_all_notifications_read():
         print(f"Error marking all notifications: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/donor/eligibility/check')
-def check_donor_eligibility():
-    if 'user_id' not in session or session.get('role') != 'donor':
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    
+# ========== ORGANIZER ROUTES ==========
+@app.route('/organizer/dashboard')
+@role_required('organizer')
+def organizer_dashboard():
     try:
-        donor_response = supabase.table('donors').select('*').eq('user_id', session['user_id']).execute()
+        organizer_id = session.get('organizer_id') or session.get('user_id')
         
-        if not donor_response.data:
-            return jsonify({'success': False, 'error': 'Donor not found'}), 404
+        # Get events created by this organizer
+        events_response = supabase.table('events').select('*').eq('organizer_id', organizer_id).execute()
+        total_events = len(events_response.data) if events_response.data else 0
         
-        donor = donor_response.data[0]
+        # Get total registrations across all events
+        total_registrations = 0
+        if events_response.data:
+            for event in events_response.data:
+                reg_response = supabase.table('registrations').select('*', count='exact').eq('event_id', event['id']).execute()
+                if reg_response.data:
+                    total_registrations += len(reg_response.data)
         
-        eligible = donor.get('eligibility_status', False)
-        reason = donor.get('disqualification_reason', '')
+        # Get total attendance
+        total_attendance = 0
+        if events_response.data:
+            for event in events_response.data:
+                attendance_response = supabase.table('attendance').select('*', count='exact').eq('event_id', event['id']).execute()
+                if attendance_response.data:
+                    total_attendance += len(attendance_response.data)
         
-        response_data = {
-            'success': True,
-            'eligible': eligible,
-            'message': 'You are eligible to donate!' if eligible else 'You are not eligible to donate.',
-            'reason': reason if reason else '',
-            'last_donation': donor.get('last_donation_date')
+        # Blood units collected
+        blood_units_collected = total_attendance
+        
+        # Recent events
+        recent_events = []
+        if events_response.data:
+            for event in events_response.data[:5]:
+                reg_count_response = supabase.table('registrations').select('*', count='exact').eq('event_id', event['id']).execute()
+                event['registration_count'] = len(reg_count_response.data) if reg_count_response.data else 0
+                recent_events.append(event)
+        
+        # Upcoming events
+        upcoming_events = []
+        today = datetime.now().date()
+        if events_response.data:
+            for event in events_response.data:
+                event_date = None
+                if event.get('event_date'):
+                    if isinstance(event['event_date'], str):
+                        try:
+                            event_date = datetime.strptime(event['event_date'], '%Y-%m-%d').date()
+                        except:
+                            event_date = None
+                    elif isinstance(event['event_date'], datetime):
+                        event_date = event['event_date'].date()
+                
+                if event_date and event_date >= today and event.get('status') == 'Upcoming':
+                    reg_count_response = supabase.table('registrations').select('*', count='exact').eq('event_id', event['id']).execute()
+                    event['registration_count'] = len(reg_count_response.data) if reg_count_response.data else 0
+                    upcoming_events.append(event)
+        
+        # Statistics
+        completed_events_count = sum(1 for event in events_response.data if event.get('status') == 'Completed') if events_response.data else 0
+        average_attendance = (total_attendance / completed_events_count) if completed_events_count > 0 else 0
+        success_rate = (completed_events_count / total_events * 100) if total_events > 0 else 0
+        
+        return render_template('organizer_dashboard.html',
+                             total_events=total_events,
+                             total_registrations=total_registrations,
+                             total_attendance=total_attendance,
+                             blood_units_collected=blood_units_collected,
+                             recent_events=recent_events,
+                             upcoming_events=upcoming_events,
+                             completed_events_count=completed_events_count,
+                             average_attendance=round(average_attendance, 1),
+                             success_rate=round(success_rate, 1))
+    
+    except Exception as e:
+        print(f"Organizer dashboard error: {e}")
+        flash('Error loading organizer dashboard', 'error')
+        return render_template('organizer_dashboard.html',
+                             total_events=0,
+                             total_registrations=0,
+                             total_attendance=0,
+                             blood_units_collected=0,
+                             recent_events=[],
+                             upcoming_events=[],
+                             completed_events_count=0,
+                             average_attendance=0,
+                             success_rate=0)
+
+@app.route('/organizer/events')
+@role_required('organizer')
+def manage_events():
+    try:
+        organizer_id = session.get('organizer_id') or session.get('user_id')
+        
+        events_response = supabase.table('events').select('*').eq('organizer_id', organizer_id).execute()
+        events = events_response.data if events_response.data else []
+        
+        for event in events:
+            reg_count_response = supabase.table('registrations').select('*', count='exact').eq('event_id', event['id']).execute()
+            event['registration_count'] = len(reg_count_response.data) if reg_count_response.data else 0
+        
+        return render_template('manage_events.html', events=events)
+    
+    except Exception as e:
+        print(f"Manage events error: {e}")
+        flash('Error loading events', 'error')
+        return render_template('manage_events.html', events=[])
+
+@app.route('/organizer/event/<int:event_id>')
+@role_required('organizer')
+def view_event(event_id):
+    try:
+        event_response = supabase.table('events').select('*').eq('id', event_id).execute()
+        
+        if not event_response.data:
+            flash('Event not found', 'error')
+            return redirect(url_for('manage_events'))
+        
+        event = event_response.data[0]
+        
+        registrations_response = supabase.table('registrations').select('*').eq('event_id', event_id).execute()
+        registrations = registrations_response.data if registrations_response.data else []
+        
+        return render_template('view_event.html', event=event, registrations=registrations)
+    
+    except Exception as e:
+        print(f"View event error: {e}")
+        flash('Error loading event', 'error')
+        return redirect(url_for('manage_events'))
+
+@app.route('/organizer/event/save', methods=['POST'])
+@role_required('organizer')
+def save_event():
+    try:
+        organizer_id = session.get('organizer_id') or session.get('user_id')
+        event_id = request.form.get('event_id')
+        
+        event_data = {
+            'organizer_id': organizer_id,
+            'event_name': request.form.get('event_name'),
+            'event_date': request.form.get('event_date'),
+            'event_time': request.form.get('event_time'),
+            'location': request.form.get('location'),
+            'description': request.form.get('description'),
+            'target_goal': request.form.get('target_goal') or 0,
+            'status': request.form.get('status', 'Upcoming')
         }
         
-        return jsonify(response_data)
+        if event_id:
+            supabase.table('events').update(event_data).eq('id', event_id).execute()
+            flash('Event updated successfully!', 'success')
+        else:
+            supabase.table('events').insert(event_data).execute()
+            flash('Event created successfully!', 'success')
         
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-# ========== STAFF ROUTES (UNCHANGED) ==========
-@app.route('/staff/inventory', methods=['GET'])
-def view_inventory():
-    if 'user_id' not in session or session.get('role') != 'staff':
-        return redirect(url_for('login'))
+        return redirect(url_for('manage_events'))
     
+    except Exception as e:
+        print(f"Save event error: {e}")
+        flash('Error saving event', 'error')
+        return redirect(url_for('manage_events'))
+
+@app.route('/event/<int:event_id>/status', methods=['POST'])
+@role_required('organizer')
+def update_event_status(event_id):
+    try:
+        data = request.get_json()
+        new_status = data.get('status')
+        
+        if new_status not in ['Upcoming', 'Ongoing', 'Completed', 'Cancelled']:
+            return jsonify({'success': False, 'message': 'Invalid status'})
+        
+        supabase.table('events').update({'status': new_status}).eq('id', event_id).execute()
+        
+        return jsonify({'success': True, 'message': 'Event status updated'})
+    
+    except Exception as e:
+        print(f"Update event status error: {e}")
+        return jsonify({'success': False, 'message': 'Error updating event status'})
+
+@app.route('/organizer/registrations')
+@role_required('organizer')
+def view_registrations():
+    try:
+        organizer_id = session.get('organizer_id') or session.get('user_id')
+        event_id = request.args.get('event_id')
+        
+        events_response = supabase.table('events').select('*').eq('organizer_id', organizer_id).execute()
+        all_events = events_response.data if events_response.data else []
+        
+        registrations = []
+        selected_event = None
+        statistics = {}
+        
+        if event_id:
+            registrations_response = supabase.table('registrations').select('*').eq('event_id', event_id).execute()
+            
+            if registrations_response.data:
+                for reg in registrations_response.data:
+                    donor_response = supabase.table('donors').select('*').eq('user_id', reg['donor_id']).execute()
+                    if donor_response.data:
+                        reg.update(donor_response.data[0])
+                    
+                    attendance_response = supabase.table('attendance').select('*').eq('event_id', event_id).eq('donor_id', reg['donor_id']).execute()
+                    if attendance_response.data:
+                        reg['check_in_time'] = attendance_response.data[0]['check_in_time']
+                    
+                    registrations.append(reg)
+                
+                event_response = supabase.table('events').select('*').eq('id', event_id).execute()
+                if event_response.data:
+                    selected_event = event_response.data[0]
+                
+                total_registrations_count = len(registrations_response.data)
+                confirmed_count = sum(1 for r in registrations_response.data if r.get('status') == 'Confirmed')
+                attended_count = len([r for r in registrations if r.get('check_in_time')])
+                attendance_rate = (attended_count / total_registrations_count * 100) if total_registrations_count > 0 else 0
+                
+                blood_type_distribution = {}
+                for reg in registrations:
+                    blood_type = reg.get('blood_type')
+                    if blood_type:
+                        blood_type_distribution[blood_type] = blood_type_distribution.get(blood_type, 0) + 1
+                
+                statistics = {
+                    'total_registrations_count': total_registrations_count,
+                    'confirmed_count': confirmed_count,
+                    'attended_count': attended_count,
+                    'attendance_rate': round(attendance_rate, 1),
+                    'blood_type_distribution': blood_type_distribution
+                }
+        
+        return render_template('view_registrations.html',
+                             registrations=registrations,
+                             all_events=all_events,
+                             selected_event=selected_event,
+                             selected_event_id=int(event_id) if event_id else None,
+                             **statistics)
+    
+    except Exception as e:
+        print(f"View registrations error: {e}")
+        flash('Error loading registrations', 'error')
+        return render_template('view_registrations.html',
+                             registrations=[],
+                             all_events=[],
+                             selected_event=None,
+                             selected_event_id=None,
+                             total_registrations_count=0,
+                             confirmed_count=0,
+                             attended_count=0,
+                             attendance_rate=0,
+                             blood_type_distribution={})
+
+@app.route('/registration/<int:registration_id>/status', methods=['POST'])
+@role_required('organizer')
+def update_registration_status(registration_id):
+    try:
+        data = request.get_json()
+        new_status = data.get('status')
+        
+        if new_status not in ['Pending', 'Confirmed', 'Attended', 'No-show']:
+            return jsonify({'success': False, 'message': 'Invalid status'})
+        
+        supabase.table('registrations').update({'status': new_status}).eq('id', registration_id).execute()
+        
+        return jsonify({'success': True, 'message': 'Registration status updated'})
+    
+    except Exception as e:
+        print(f"Update registration status error: {e}")
+        return jsonify({'success': False, 'message': 'Error updating registration status'})
+
+@app.route('/registration/<int:registration_id>/attendance', methods=['POST'])
+@role_required('organizer')
+def mark_attendance(registration_id):
+    try:
+        registration_response = supabase.table('registrations').select('*').eq('id', registration_id).execute()
+        
+        if not registration_response.data:
+            return jsonify({'success': False, 'message': 'Registration not found'})
+        
+        registration = registration_response.data[0]
+        
+        attendance_response = supabase.table('attendance').select('*').eq('event_id', registration['event_id']).eq('donor_id', registration['donor_id']).execute()
+        
+        if not attendance_response.data:
+            supabase.table('attendance').insert({
+                'event_id': registration['event_id'],
+                'donor_id': registration['donor_id'],
+                'check_in_time': datetime.now().isoformat()
+            }).execute()
+            
+            supabase.table('registrations').update({'status': 'Attended'}).eq('id', registration_id).execute()
+        
+        return jsonify({'success': True, 'message': 'Attendance marked successfully'})
+    
+    except Exception as e:
+        print(f"Mark attendance error: {e}")
+        return jsonify({'success': False, 'message': 'Error marking attendance'})
+
+@app.route('/organizer/track-attendance')
+@role_required('organizer')
+def track_attendance():
+    try:
+        organizer_id = session.get('organizer_id') or session.get('user_id')
+        
+        events_response = supabase.table('events').select('*').eq('organizer_id', organizer_id).execute()
+        
+        attendance_data = []
+        
+        if events_response.data:
+            for event in events_response.data:
+                registrations_response = supabase.table('registrations').select('*', count='exact').eq('event_id', event['id']).execute()
+                attendance_response = supabase.table('attendance').select('*', count='exact').eq('event_id', event['id']).execute()
+                
+                total_reg = len(registrations_response.data) if registrations_response.data else 0
+                attended = len(attendance_response.data) if attendance_response.data else 0
+                
+                event_data = {
+                    'event_name': event['event_name'],
+                    'event_date': event['event_date'],
+                    'total_registrations': total_reg,
+                    'attended': attended,
+                    'attendance_rate': (attended / total_reg * 100) if total_reg > 0 else 0
+                }
+                
+                attendance_data.append(event_data)
+        
+        return render_template('track_attendance.html', attendance_data=attendance_data)
+    
+    except Exception as e:
+        print(f"Track attendance error: {e}")
+        flash('Error loading attendance data', 'error')
+        return render_template('track_attendance.html', attendance_data=[])
+
+@app.route('/organizer/reports', methods=['GET', 'POST'])
+@role_required('organizer')
+def generate_report():
+    try:
+        organizer_id = session.get('organizer_id') or session.get('user_id')
+        
+        events_response = supabase.table('events').select('*').eq('organizer_id', organizer_id).execute()
+        events = events_response.data if events_response.data else []
+        
+        reports_response = supabase.table('event_reports').select('*').execute()
+        previous_reports = reports_response.data if reports_response.data else []
+        
+        for report in previous_reports:
+            event_response = supabase.table('events').select('event_name').eq('id', report['event_id']).execute()
+            if event_response.data:
+                report['event_name'] = event_response.data[0]['event_name']
+        
+        preview_data = None
+        
+        if request.method == 'POST':
+            event_id = request.form.get('event_id')
+            action = request.form.get('action')
+            
+            if event_id:
+                event_response = supabase.table('events').select('*').eq('id', event_id).execute()
+                
+                if event_response.data:
+                    event = event_response.data[0]
+                    
+                    registrations_response = supabase.table('registrations').select('*').eq('event_id', event_id).execute()
+                    registrations = registrations_response.data if registrations_response.data else []
+                    
+                    attendance_response = supabase.table('attendance').select('*', count='exact').eq('event_id', event_id).execute()
+                    attended_count = len(attendance_response.data) if attendance_response.data else 0
+                    
+                    confirmed_count = sum(1 for r in registrations if r.get('status') == 'Confirmed')
+                    
+                    blood_type_distribution = {}
+                    for reg in registrations:
+                        donor_response = supabase.table('donors').select('blood_type').eq('user_id', reg['donor_id']).execute()
+                        if donor_response.data and donor_response.data[0].get('blood_type'):
+                            blood_type = donor_response.data[0]['blood_type']
+                            blood_type_distribution[blood_type] = blood_type_distribution.get(blood_type, 0) + 1
+                    
+                    preview_data = {
+                        'event_name': event['event_name'],
+                        'event_date': event['event_date'],
+                        'event_time': event['event_time'],
+                        'location': event['location'],
+                        'status': event['status'],
+                        'total_registrations': len(registrations),
+                        'confirmed_count': confirmed_count,
+                        'attended_count': attended_count,
+                        'attendance_rate': round((attended_count / len(registrations) * 100), 1) if registrations else 0,
+                        'blood_type_distribution': blood_type_distribution,
+                        'organizer_notes': request.form.get('organizer_notes', '')
+                    }
+                    
+                    if action == 'generate':
+                        report_data = {
+                            'event_id': event_id,
+                            'total_donors': len(registrations),
+                            'blood_units_collected': attended_count,
+                            'organizer_notes': request.form.get('organizer_notes', ''),
+                            'generated_date': datetime.now().isoformat()
+                        }
+                        
+                        supabase.table('event_reports').insert(report_data).execute()
+                        
+                        flash('Report generated successfully!', 'success')
+                        return redirect(url_for('generate_report', event_id=event_id))
+        
+        return render_template('generate_report.html',
+                             events=events,
+                             previous_reports=previous_reports,
+                             preview_data=preview_data,
+                             selected_event_id=request.args.get('event_id'))
+    
+    except Exception as e:
+        print(f"Generate report error: {e}")
+        flash('Error generating report', 'error')
+        return render_template('generate_report.html',
+                             events=[],
+                             previous_reports=[],
+                             preview_data=None,
+                             selected_event_id=None)
+
+@app.route('/report/<int:report_id>/download')
+@role_required('organizer')
+def download_report(report_id):
+    try:
+        report_response = supabase.table('event_reports').select('*').eq('id', report_id).execute()
+        
+        if not report_response.data:
+            flash('Report not found', 'error')
+            return redirect(url_for('generate_report'))
+        
+        report = report_response.data[0]
+        
+        event_response = supabase.table('events').select('*').eq('id', report['event_id']).execute()
+        
+        if not event_response.data:
+            flash('Event not found', 'error')
+            return redirect(url_for('generate_report'))
+        
+        event = event_response.data[0]
+        
+        output = StringIO()
+        writer = csv.writer(output)
+        
+        writer.writerow(['BloodLink Event Report'])
+        writer.writerow([])
+        writer.writerow(['Event Details'])
+        writer.writerow(['Event Name:', event['event_name']])
+        writer.writerow(['Date:', event['event_date']])
+        writer.writerow(['Location:', event['location']])
+        writer.writerow(['Status:', event['status']])
+        writer.writerow([])
+        writer.writerow(['Report Statistics'])
+        writer.writerow(['Total Donors:', report['total_donors']])
+        writer.writerow(['Blood Units Collected:', report['blood_units_collected']])
+        writer.writerow(['Report Generated:', report['generated_date']])
+        writer.writerow([])
+        
+        if report['organizer_notes']:
+            writer.writerow(['Organizer Notes:'])
+            writer.writerow([report['organizer_notes']])
+        
+        output.seek(0)
+        filename = f"bloodlink_report_{event['event_name'].replace(' ', '_')}_{report['generated_date'][:10]}.csv"
+        
+        return send_file(
+            output,
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=filename
+        )
+    
+    except Exception as e:
+        print(f"Download report error: {e}")
+        flash('Error downloading report', 'error')
+        return redirect(url_for('generate_report'))
+
+@app.route('/report/<int:report_id>', methods=['DELETE'])
+@role_required('organizer')
+def delete_report(report_id):
+    try:
+        supabase.table('event_reports').delete().eq('id', report_id).execute()
+        return jsonify({'success': True, 'message': 'Report deleted successfully'})
+    
+    except Exception as e:
+        print(f"Delete report error: {e}")
+        return jsonify({'success': False, 'message': 'Error deleting report'})
+
+# ========== STAFF ROUTES ==========
+@app.route('/staff/inventory', methods=['GET'])
+@role_required('staff')
+def view_inventory():
     try:
         response = supabase.table('inventory').select('*').order('blood_type').execute()
         inventory = response.data
@@ -726,10 +1106,8 @@ def view_inventory():
         return render_template('update_inventory.html', inventory=[], blood_types=[])
 
 @app.route('/staff/inventory/update', methods=['POST'])
+@role_required('staff')
 def update_inventory():
-    if 'user_id' not in session or session.get('role') != 'staff':
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    
     try:
         data = request.get_json()
         blood_type = data.get('blood_type')
@@ -760,10 +1138,8 @@ def update_inventory():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/staff/donors', methods=['GET'])
+@role_required('staff')
 def donor_list():
-    if 'user_id' not in session or session.get('role') != 'staff':
-        return redirect(url_for('login'))
-    
     try:
         response = supabase.table('donors').select('*').order('donor_name').execute()
         donors = response.data
@@ -784,10 +1160,8 @@ def donor_list():
         return render_template('donor_list.html', donors=[])
 
 @app.route('/staff/donors/add', methods=['POST'])
+@role_required('staff')
 def add_donor():
-    if 'user_id' not in session or session.get('role') != 'staff':
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    
     try:
         data = request.get_json()
         
@@ -849,10 +1223,8 @@ def add_donor():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/staff/requests', methods=['GET'])
+@role_required('staff')
 def view_requests():
-    if 'user_id' not in session or session.get('role') != 'staff':
-        return redirect(url_for('login'))
-    
     try:
         response = supabase.table('urgent_request').select('*').order('requested_at', desc=True).execute()
         requests = response.data
@@ -864,10 +1236,8 @@ def view_requests():
         return render_template('view_requests.html', requests=[])
 
 @app.route('/staff/requests/create', methods=['GET', 'POST'])
+@role_required('staff')
 def create_request():
-    if 'user_id' not in session or session.get('role') != 'staff':
-        return redirect(url_for('login'))
-    
     staff_id = session.get('staff_id')
     hospital_name = 'City General Hospital'
     
@@ -921,10 +1291,8 @@ def create_request():
             return redirect(url_for('create_request'))
         
 @app.route('/staff/donors/toggle-eligibility', methods=['POST'])
+@role_required('staff')
 def toggle_donor_eligibility():
-    if 'user_id' not in session or session.get('role') != 'staff':
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    
     try:
         data = request.get_json()
         donor_id = data.get('donor_id')
@@ -951,10 +1319,8 @@ def toggle_donor_eligibility():
         return jsonify({'success': False, 'error': str(e)}), 500
     
 @app.route('/staff/donors/<donor_id>', methods=['GET'])
+@role_required('staff')
 def get_donor_details(donor_id):
-    if 'user_id' not in session or session.get('role') != 'staff':
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    
     try:
         response = supabase.table('donors').select('*').eq('id', donor_id).execute()
         if response.data:
@@ -966,10 +1332,8 @@ def get_donor_details(donor_id):
         return jsonify({'success': False, 'error': str(e)}), 500
     
 @app.route('/staff/donors/<donor_id>/update', methods=['POST'])
+@role_required('staff')
 def update_donor(donor_id):
-    if 'user_id' not in session or session.get('role') != 'staff':
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    
     try:
         data = request.get_json()
         
@@ -992,10 +1356,8 @@ def update_donor(donor_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/staff/requests/<int:request_id>/fulfill', methods=['POST'])
+@role_required('staff')
 def fulfill_request(request_id):
-    if 'user_id' not in session or session.get('role') != 'staff':
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    
     try:
         response = supabase.table('urgent_request').update({
             'status': 'Fulfilled',
@@ -1010,10 +1372,8 @@ def fulfill_request(request_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/staff/requests/<int:request_id>/cancel', methods=['POST'])
+@role_required('staff')
 def cancel_request(request_id):
-    if 'user_id' not in session or session.get('role') != 'staff':
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    
     try:
         response = supabase.table('urgent_request').update({
             'status': 'Cancelled',
@@ -1028,10 +1388,8 @@ def cancel_request(request_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/staff/requests/<int:request_id>/notify', methods=['POST'])
+@role_required('staff')
 def notify_donors(request_id):
-    if 'user_id' not in session or session.get('role') != 'staff':
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    
     try:
         request_response = supabase.table('urgent_request').select('*').eq('id', request_id).execute()
         if not request_response.data:
@@ -1054,10 +1412,8 @@ def notify_donors(request_id):
         return jsonify({'success': False, 'error': str(e)}), 500
     
 @app.route('/staff/requests/<request_id>', methods=['GET'])
+@role_required('staff')
 def get_request_details(request_id):
-    if 'user_id' not in session or session.get('role') != 'staff':
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    
     try:
         try:
             request_id_int = int(request_id)
@@ -1086,17 +1442,10 @@ def get_request_details(request_id):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# ========== OTHER ROUTES ==========
-@app.route('/organizer/dashboard')
-def organizer_dashboard():
-    if 'user_id' not in session or session.get('role') != 'organizer':
-        return redirect(url_for('login'))
-    return render_template('organizer_dashboard.html')
-
+# ========== ADMIN ROUTES ==========
 @app.route('/admin/dashboard')
+@role_required('admin')
 def admin_dashboard():
-    if 'user_id' not in session or session.get('role') != 'admin':
-        return redirect(url_for('login'))
     return render_template('admin_dashboard.html')
 
 if __name__ == '__main__':
