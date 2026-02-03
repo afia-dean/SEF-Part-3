@@ -233,6 +233,11 @@ body {
     color: white;
 }
 
+.btn-sm {
+    padding: 0.25rem 0.75rem;
+    font-size: 0.875rem;
+}
+
 table {
     width: 100%;
     border-collapse: collapse;
@@ -419,6 +424,11 @@ tbody tr:hover {
     color: var(--dark-gray);
 }
 
+/* Animation Classes */
+.fade-in {
+    animation: fadeIn 0.5s ease-out;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     .navbar {
@@ -457,6 +467,13 @@ tbody tr:hover {
     }
 }
 
-.fade-in {
-    animation: fadeIn 0.5s ease-out;
+/* Subtitle */
+.subtitle {
+    color: var(--dark-gray);
+    margin-bottom: 1rem;
+}
+
+/* Dashboard Header */
+.dashboard-header {
+    margin-bottom: 2rem;
 }
