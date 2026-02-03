@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BloodLink - Analytics & Logs</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style_combined.css') }}">
+</head>
+<body>
+<header>
+    <div class="header-container">
+        <a href="{{ url_for('dashboard') }}" class="logo"><i class="fas fa-tint"></i> BloodLink</a>
+        <div class="header-right">
+            <span class="welcome-text"><i class="fas fa-user-shield"></i> Admin Panel</span>
+            <button class="btn btn-menu" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
+        </div>
+    </div>
+</header>
+
+<div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <span>Menu</span>
+        <button class="close-btn" onclick="toggleSidebar()">&times;</button>
+    </div>
+    <nav class="sidebar-nav">
+        <a href="{{ url_for('dashboard') }}"><i class="fas fa-gauge"></i> Dashboard</a>
+        <a href="{{ url_for('blood_management') }}"><i class="fas fa-warehouse"></i> Blood Management</a>
+        <a href="{{ url_for('blood_requests') }}"><i class="fas fa-hand-holding-droplet"></i> Blood Requests</a>
+        <a href="{{ url_for('manage_users') }}"><i class="fas fa-users"></i> Manage Users</a>
+        <a href="{{ url_for('analytics') }}"><i class="fas fa-chart-line"></i> Analytics & Logs</a>
+        <hr>
+        <a href="{{ url_for('logout') }}" class="logout-link"><i class="fas fa-sign-out-alt"></i> Logout</a>
+    </nav>
+</div>
+<div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<div id="main-content">
+    <section class="hero-compact" style="padding: 2rem;">
+        <div class="hero-compact-content">
+            <h1>Analytics & Logs</h1>
+            <p>Operational snapshot + audit trails (tables only).</p>
+        </div>
+        <div class="hero-compact-icon">
+            <i class="fas fa-chart-line" style="font-size: 3.5rem;"></i>
+        </div>
+    </section>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="label">Total Users</div>
+            <div class="value">{{ counts.total_users }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Active Users</div>
+            <div class="value">{{ counts.active_users }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Pending Requests</div>
+            <div class="value">{{ counts.pending_requests }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Total Inventory (ml)</div>
+            <div class="value">{{ counts.total_inventory_ml }}</div>
+        </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+        <div class="card" style="margin: 0;">
+            <h2 style="margin-top: 0;"><i class="fas fa-triangle-exclamation"></i> Low Stock</h2>
+            {% if low_stock %}
+            <div style="overflow-x:auto; margin-top: 1rem;">
+                <table class="table">
+                    <thead><tr><th>Blood Type</th><th>Qty (ml)</th></tr></thead>
+                    <tbody>
+                        {% for item in low_stock %}
+                        <tr>
+                            <td><b>{{ item.blood_type }}</b></td>
+                            <td><span class="badge red">{{ item.quantity_ml }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="subtext" style="margin-top: 1rem;">No low stock items.</p>
+            {% endif %}
+        </div>
+
+        <div class="card" style="margin: 0;">
+            <h2 style="margin-top: 0;"><i class="fas fa-hourglass-half"></i> Pending Requests</h2>
+            {% if pending_requests %}
+            <div style="overflow-x:auto; margin-top: 1rem;">
+                <table class="table">
+                    <thead><tr><th>Requester</th><th>Type</th><th>Qty</th></tr></thead>
+                    <tbody>
+                        {% for r in pending_requests %}
+                        <tr>
+                            <td><b>{{ r.requester }}</b></td>
+                            <td>{{ r.blood_type }}</td>
+                            <td>{{ r.quantity_ml }} ml</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="subtext" style="margin-top: 1rem;">No pending requests.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-top: 0;"><i class="fas fa-list-check"></i> Inventory Audit Logs</h2>
+        <p class="subtext">Designed to match best practice: <b>inventory_logs</b> table + trigger (PostgreSQL/Supabase).</p>
+        <div style="overflow-x:auto; margin-top: 1rem;">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Action</th><th>Inventory ID</th><th>Old Qty</th><th>New Qty</th><th>Changed By</th><th>Changed At</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in inv_logs %}
+                    <tr>
+                        <td><span class="badge blue">{{ log.action }}</span></td>
+                        <td>{{ log.inventory_id }}</td>
+                        <td>{{ log.old_quantity }}</td>
+                        <td>{{ log.new_quantity }}</td>
+                        <td>{{ log.changed_by }}</td>
+                        <td class="subtext">{{ log.changed_at }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-top: 0;"><i class="fas fa-clipboard-list"></i> Request Audit Logs</h2>
+        <div style="overflow-x:auto; margin-top: 1rem;">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Action</th><th>Request ID</th><th>Old Status</th><th>New Status</th><th>Changed By</th><th>Changed At</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in req_logs %}
+                    <tr>
+                        <td><span class="badge gray">{{ log.action }}</span></td>
+                        <td>{{ log.request_id }}</td>
+                        <td>{{ log.old_status }}</td>
+                        <td>{{ log.new_status }}</td>
+                        <td>{{ log.changed_by }}</td>
+                        <td class="subtext">{{ log.changed_at }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='admin_script.js') }}"></script>
+</body>
+</html>

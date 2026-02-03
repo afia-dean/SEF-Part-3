@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BloodLink - Blood Requests</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style_combined.css') }}">
+</head>
+<body>
+<header>
+    <div class="header-container">
+        <a href="{{ url_for('dashboard') }}" class="logo"><i class="fas fa-tint"></i> BloodLink</a>
+        <div class="header-right">
+            <span class="welcome-text"><i class="fas fa-user-shield"></i> Admin Panel</span>
+            <button class="btn btn-menu" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
+        </div>
+    </div>
+</header>
+
+<div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <span>Menu</span>
+        <button class="close-btn" onclick="toggleSidebar()">&times;</button>
+    </div>
+    <nav class="sidebar-nav">
+        <a href="{{ url_for('dashboard') }}"><i class="fas fa-gauge"></i> Dashboard</a>
+        <a href="{{ url_for('blood_management') }}"><i class="fas fa-warehouse"></i> Blood Management</a>
+        <a href="{{ url_for('blood_requests') }}"><i class="fas fa-hand-holding-droplet"></i> Blood Requests</a>
+        <a href="{{ url_for('manage_users') }}"><i class="fas fa-users"></i> Manage Users</a>
+        <a href="{{ url_for('analytics') }}"><i class="fas fa-chart-line"></i> Analytics & Logs</a>
+        <hr>
+        <a href="{{ url_for('logout') }}" class="logout-link"><i class="fas fa-sign-out-alt"></i> Logout</a>
+    </nav>
+</div>
+<div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<div id="main-content">
+    <section class="hero-compact" style="padding: 2rem;">
+        <div class="hero-compact-content">
+            <h1>Blood Requests</h1>
+            <p>Review incoming requests and update their statuses.</p>
+        </div>
+        <div class="hero-compact-icon">
+            <i class="fas fa-hand-holding-droplet" style="font-size: 3.5rem;"></i>
+        </div>
+    </section>
+
+    <div class="card">
+        <h2 style="margin-top:0;"><i class="fas fa-list"></i> Requests</h2>
+        <div style="overflow-x:auto; margin-top: 1rem;">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Hospital</th>
+                        <th>Blood Type</th>
+                        <th>Quantity (ml)</th>
+                        <th>Status</th>
+                        <th>Requested At</th>
+                        <th>Update</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for req in requests %}
+                    <tr>
+                        <td><b>{{ req.id }}</b></td>
+                        <td>{{ req.hospital_name }}</td>
+                        <td>{{ req.blood_type }}</td>
+                        <td>{{ req.quantity_ml }}</td>
+                        <td>
+                            {% set s = req.status | lower %}
+                            {% if s == 'approved' %}
+                                <span class="badge green">Approved</span>
+                            {% elif s == 'rejected' %}
+                                <span class="badge red">Rejected</span>
+                            {% elif s == 'fulfilled' %}
+                                <span class="badge blue">Fulfilled</span>
+                            {% else %}
+                                <span class="badge yellow">Pending</span>
+                            {% endif %}
+                        </td>
+                        <td class="subtext">{{ req.requested_at }}</td>
+                        <td>
+                            <form method="POST" class="actions-row">
+                                <input type="hidden" name="id" value="{{ req.id }}">
+                                <select name="status" required style="max-width: 200px;">
+                                    <option value="pending" {% if req.status=='pending' %}selected{% endif %}>Pending</option>
+                                    <option value="approved" {% if req.status=='approved' %}selected{% endif %}>Approved</option>
+                                    <option value="rejected" {% if req.status=='rejected' %}selected{% endif %}>Rejected</option>
+                                    <option value="fulfilled" {% if req.status=='fulfilled' %}selected{% endif %}>Fulfilled</option>
+                                </select>
+                                <button class="btn btn-primary" type="submit"><i class="fas fa-save"></i> Update</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if not requests %}
+            <p class="subtext" style="margin-top: 1rem;">No requests found.</p>
+        {% endif %}
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='admin_script.js') }}"></script>
+</body>
+</html>

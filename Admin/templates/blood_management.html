@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BloodLink - Blood Management</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style_combined.css') }}">
+</head>
+<body>
+<header>
+    <div class="header-container">
+        <a href="{{ url_for('dashboard') }}" class="logo">
+            <i class="fas fa-tint"></i> BloodLink
+        </a>
+        <div class="header-right">
+            <span class="welcome-text"><i class="fas fa-user-shield"></i> Admin Panel</span>
+            <button class="btn btn-menu" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
+        </div>
+    </div>
+</header>
+
+<div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <span>Menu</span>
+        <button class="close-btn" onclick="toggleSidebar()">&times;</button>
+    </div>
+    <nav class="sidebar-nav">
+        <a href="{{ url_for('dashboard') }}"><i class="fas fa-gauge"></i> Dashboard</a>
+        <a href="{{ url_for('blood_management') }}"><i class="fas fa-warehouse"></i> Blood Management</a>
+        <a href="{{ url_for('blood_requests') }}"><i class="fas fa-hand-holding-droplet"></i> Blood Requests</a>
+        <a href="{{ url_for('manage_users') }}"><i class="fas fa-users"></i> Manage Users</a>
+        <a href="{{ url_for('analytics') }}"><i class="fas fa-chart-line"></i> Analytics & Logs</a>
+        <hr>
+        <a href="{{ url_for('logout') }}" class="logout-link"><i class="fas fa-sign-out-alt"></i> Logout</a>
+    </nav>
+</div>
+<div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<div id="main-content">
+    <section class="hero-compact" style="padding: 2rem;">
+        <div class="hero-compact-content">
+            <h1>Blood Management</h1>
+            <p>Update blood inventory quantities and keep stock accurate.</p>
+        </div>
+        <div class="hero-compact-icon">
+            <i class="fas fa-warehouse" style="font-size: 3.5rem;"></i>
+        </div>
+    </section>
+
+    <div class="card">
+        <h2 style="margin-top: 0;"><i class="fas fa-table"></i> Inventory Table</h2>
+        <div style="overflow-x:auto; margin-top: 1rem;">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Blood Type</th>
+                        <th>Quantity (ml)</th>
+                        <th>Update Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in inventory %}
+                    <tr>
+                        <td><b>{{ item.blood_type }}</b></td>
+                        <td>
+                            {% if item.quantity_ml < 500 %}
+                                <span class="badge red">{{ item.quantity_ml }}</span>
+                            {% else %}
+                                <span class="badge green">{{ item.quantity_ml }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <form method="POST" class="actions-row">
+                                <input type="hidden" name="id" value="{{ item.id }}">
+                                <input type="number" name="quantity_ml" min="0" value="0" required style="max-width: 160px;">
+                                <button class="btn btn-primary" name="action" value="add" type="submit"><i class="fas fa-plus"></i> Add</button>
+                                <button class="btn btn-danger" name="action" value="remove" type="submit"><i class="fas fa-minus"></i> Remove</button>
+                                <button class="btn btn-outline" name="action" value="set" type="submit"><i class="fas fa-pen"></i> Set</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <p class="subtext" style="margin-top: 1rem;">
+            Low stock is shown in red when below <b>500ml</b>.
+        </p>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='admin_script.js') }}"></script>
+</body>
+</html>
