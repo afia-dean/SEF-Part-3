@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BloodLink - Admin Dashboard</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_style.css') }}">
+</head>
+<body>
+<header>
+    <div class="header-container">
+        <a href="{{ url_for('dashboard') }}" class="logo">
+            <i class="fas fa-tint"></i> BloodLink
+        </a>
+        <div class="header-right">
+            <span class="welcome-text"><i class="fas fa-user-shield"></i> Admin Panel</span>
+            <button class="btn btn-menu" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
+        </div>
+    </div>
+</header>
+
+<div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <span>Menu</span>
+        <button class="close-btn" onclick="toggleSidebar()">&times;</button>
+    </div>
+    <nav class="sidebar-nav">
+        <a href="{{ url_for('dashboard') }}"><i class="fas fa-gauge"></i> Dashboard</a>
+        <a href="{{ url_for('blood_management') }}"><i class="fas fa-warehouse"></i> Blood Management</a>
+        <a href="{{ url_for('blood_requests') }}"><i class="fas fa-hand-holding-droplet"></i> Blood Requests</a>
+        <a href="{{ url_for('manage_users') }}"><i class="fas fa-users"></i> Manage Users</a>
+        <a href="{{ url_for('analytics') }}"><i class="fas fa-chart-line"></i> Analytics & Logs</a>
+        <hr>
+        <a href="{{ url_for('logout') }}" class="logout-link"><i class="fas fa-sign-out-alt"></i> Logout</a>
+    </nav>
+</div>
+<div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<div id="main-content">
+    <section class="hero-compact">
+        <div class="hero-compact-content">
+            <h1>Dashboard</h1>
+            <p>Operational overview of inventory and requests.</p>
+            <a href="{{ url_for('blood_management') }}" class="btn btn-primary"><i class="fas fa-warehouse"></i> Manage Inventory</a>
+        </div>
+        <div class="hero-compact-icon">
+            <i class="fas fa-chart-pie" style="font-size: 4rem;"></i>
+        </div>
+    </section>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="label">Total Inventory (ml)</div>
+            <div class="value">{{ counts.total_inventory_ml }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Low Stock Types</div>
+            <div class="value">{{ counts.low_stock | length }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Pending Requests</div>
+            <div class="value">{{ counts.pending_requests }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Total Requests</div>
+            <div class="value">{{ counts.total_requests }}</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-bottom: 0.5rem;"><i class="fas fa-bolt"></i> Quick Actions</h2>
+        <p class="subtext" style="margin-bottom: 1rem;">Jump to common admin tasks.</p>
+        <div class="actions-row">
+            <a class="btn btn-primary" href="{{ url_for('blood_management') }}"><i class="fas fa-warehouse"></i> Blood Management</a>
+            <a class="btn btn-outline" href="{{ url_for('blood_requests') }}"><i class="fas fa-hand-holding-droplet"></i> Blood Requests</a>
+            <a class="btn btn-muted" href="{{ url_for('analytics') }}"><i class="fas fa-chart-line"></i> Analytics & Logs</a>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-bottom: 0.75rem;"><i class="fas fa-triangle-exclamation"></i> Low Stock (Below 500ml)</h2>
+        {% if counts.low_stock %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Blood Type</th>
+                    <th>Quantity (ml)</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in counts.low_stock %}
+                <tr>
+                    <td><b>{{ item.blood_type }}</b></td>
+                    <td><span class="badge red">{{ item.quantity_ml }}</span></td>
+                    <td><a class="btn btn-warning" href="{{ url_for('blood_management') }}"><i class="fas fa-rotate"></i> Restock / Update</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+            <p class="subtext">No low stock items 🎉</p>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <h2 style="margin-bottom: 0.75rem;"><i class="fas fa-clock"></i> Latest Activity</h2>
+        <div class="stats-grid" style="grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0;">
+            <div class="card" style="margin: 0; box-shadow: none; border: 1px solid var(--border-light);">
+                <h3 style="margin-top: 0;">Latest Inventory Actions</h3>
+                {% if latest_inventory %}
+                <table class="table">
+                    <thead><tr><th>Action</th><th>ID</th><th>Old</th><th>New</th><th>Time</th></tr></thead>
+                    <tbody>
+                        {% for log in latest_inventory %}
+                        <tr>
+                            <td><span class="badge blue">{{ log.action }}</span></td>
+                            <td>{{ log.inventory_id }}</td>
+                            <td>{{ log.old_quantity }}</td>
+                            <td>{{ log.new_quantity }}</td>
+                            <td class="subtext">{{ log.changed_at }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="subtext">No inventory actions yet.</p>
+                {% endif %}
+            </div>
+
+            <div class="card" style="margin: 0; box-shadow: none; border: 1px solid var(--border-light);">
+                <h3 style="margin-top: 0;">Latest Request Actions</h3>
+                {% if latest_requests %}
+                <table class="table">
+                    <thead><tr><th>Action</th><th>ID</th><th>Old</th><th>New</th><th>Time</th></tr></thead>
+                    <tbody>
+                        {% for log in latest_requests %}
+                        <tr>
+                            <td><span class="badge gray">{{ log.action }}</span></td>
+                            <td>{{ log.request_id }}</td>
+                            <td>{{ log.old_status }}</td>
+                            <td>{{ log.new_status }}</td>
+                            <td class="subtext">{{ log.changed_at }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="subtext">No request actions yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/admin_script.js') }}"></script>
+</body>
+</html>
