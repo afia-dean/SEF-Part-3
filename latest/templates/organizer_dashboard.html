@@ -1,0 +1,184 @@
+<!-- templates/organizer_dashboard.html -->
+{% extends "base.html" %}
+
+{% block title %}Organizer Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h1 class="page-title">Organizer Dashboard</h1>
+    <p class="subtitle">Welcome back, {{ session.organizer_name }}! Manage your blood donation events efficiently.</p>
+</div>
+
+<!-- Dashboard Cards -->
+<div class="dashboard-cards">
+    <div class="card fade-in">
+        <div class="card-icon">
+            <i class="fas fa-calendar-alt"></i>
+        </div>
+        <h3>Total Events</h3>
+        <div class="card-value">{{ total_events }}</div>
+    </div>
+    
+    <div class="card fade-in" style="animation-delay: 0.1s;">
+        <div class="card-icon">
+            <i class="fas fa-users"></i>
+        </div>
+        <h3>Total Registrations</h3>
+        <div class="card-value">{{ total_registrations }}</div>
+    </div>
+    
+    <div class="card fade-in" style="animation-delay: 0.2s;">
+        <div class="card-icon">
+            <i class="fas fa-user-check"></i>
+        </div>
+        <h3>Total Attendance</h3>
+        <div class="card-value">{{ total_attendance }}</div>
+    </div>
+    
+    <div class="card fade-in" style="animation-delay: 0.3s;">
+        <div class="card-icon">
+            <i class="fas fa-tint"></i>
+        </div>
+        <h3>Blood Units Collected</h3>
+        <div class="card-value">{{ blood_units_collected }}</div>
+    </div>
+</div>
+
+<!-- Recent Events Table -->
+<div class="table-container fade-in" style="animation-delay: 0.4s;">
+    <div class="table-header">
+        <h3><i class="fas fa-calendar-week"></i> Recent Events</h3>
+        <a href="{{ url_for('manage_events') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Create New Event
+        </a>
+    </div>
+    
+    {% if recent_events %}
+    <table>
+        <thead>
+            <tr>
+                <th>Event Name</th>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Location</th>
+                <th>Status</th>
+                <th>Registrations</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for event in recent_events %}
+            <tr>
+                <td>{{ event.event_name }}</td>
+                <td>{{ event.event_date }}</td>
+                <td>{{ event.event_time }}</td>
+                <td>{{ event.location }}</td>
+                <td>
+                    <span class="status-badge status-{{ event.status.lower() }}">
+                        {{ event.status }}
+                    </span>
+                </td>
+                <td>{{ event.registration_count or 0 }}</td>
+                <td>
+                    <a href="{{ url_for('view_event', event_id=event.id) }}" class="btn btn-secondary btn-sm">
+                        <i class="fas fa-eye"></i> View
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div style="padding: 2rem; text-align: center; color: var(--dark-gray);">
+        <i class="fas fa-calendar-times" style="font-size: 3rem; margin-bottom: 1rem;"></i>
+        <h3>No Events Found</h3>
+        <p>Create your first blood donation event to get started!</p>
+        <a href="{{ url_for('manage_events') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Create Event
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Upcoming Events -->
+<div class="table-container fade-in" style="animation-delay: 0.5s;">
+    <div class="table-header">
+        <h3><i class="fas fa-clock"></i> Upcoming Events</h3>
+    </div>
+    
+    {% if upcoming_events %}
+    <table>
+        <thead>
+            <tr>
+                <th>Event Name</th>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Location</th>
+                <th>Target Goal</th>
+                <th>Pre-registered</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for event in upcoming_events %}
+            <tr>
+                <td>{{ event.event_name }}</td>
+                <td>{{ event.event_date }}</td>
+                <td>{{ event.event_time }}</td>
+                <td>{{ event.location }}</td>
+                <td>{{ event.target_goal or 0 }} donors</td>
+                <td>{{ event.registration_count or 0 }}</td>
+                <td>
+                    <a href="{{ url_for('view_registrations', event_id=event.id) }}" class="btn btn-secondary btn-sm">
+                        <i class="fas fa-users"></i> View Registrations
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div style="padding: 2rem; text-align: center; color: var(--dark-gray);">
+        <i class="fas fa-calendar-check" style="font-size: 3rem; margin-bottom: 1rem;"></i>
+        <h3>No Upcoming Events</h3>
+        <p>Schedule new events to attract more donors!</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Quick Actions -->
+<div class="grid fade-in" style="animation-delay: 0.6s;">
+    <div class="card">
+        <h3><i class="fas fa-bolt"></i> Quick Actions</h3>
+        <div style="margin-top: 1rem;">
+            <a href="{{ url_for('manage_events') }}" class="btn btn-primary" style="margin-bottom: 0.5rem; width: 100%;">
+                <i class="fas fa-calendar-plus"></i> Create New Event
+            </a>
+            <a href="{{ url_for('view_registrations') }}" class="btn btn-secondary" style="margin-bottom: 0.5rem; width: 100%;">
+                <i class="fas fa-user-check"></i> Check Registrations
+            </a>
+            <a href="{{ url_for('generate_report') }}" class="btn btn-success" style="width: 100%;">
+                <i class="fas fa-file-export"></i> Generate Report
+            </a>
+        </div>
+    </div>
+    
+    <div class="card">
+        <h3><i class="fas fa-chart-line"></i> Event Statistics</h3>
+        <div style="margin-top: 1rem;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                <span>Completed Events:</span>
+                <strong>{{ completed_events_count }}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                <span>Average Attendance:</span>
+                <strong>{{ average_attendance }}%</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                <span>Success Rate:</span>
+                <strong>{{ success_rate }}%</strong>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

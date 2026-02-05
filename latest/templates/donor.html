@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>BloodLink - Donor Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/donor_style.css') }}">
+</head>
+<body>
+<header>
+    <div class="header-container">
+        <a href="{{ url_for('donor_dashboard') }}" class="logo">
+            <i class="fas fa-tint"></i> BloodLink
+        </a>
+        <div class="header-right">
+            {% if donor %}
+            <span class="welcome-text">
+                <i class="fas fa-user"></i> Welcome, {{ donor.donor_name }}
+            </span>
+            {% endif %}
+            {% if unread_notifications and unread_notifications > 0 %}
+            <a href="{{ url_for('donor_notifications') }}" class="notification-badge">
+                <i class="fas fa-bell fa-lg"></i>
+                <span class="notification-count">{{ unread_notifications }}</span>
+            </a>
+            {% endif %}
+            <button class="btn btn-menu" onclick="toggleSidebar()">
+                <i class="fas fa-bars"></i>
+            </button>
+        </div>
+    </div>
+</header>
+
+<div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <span>Menu</span>
+        <button class="close-btn" onclick="toggleSidebar()">&times;</button>
+    </div>
+    <nav class="sidebar-nav">
+        <a href="{{ url_for('donor_dashboard') }}"><i class="fas fa-home"></i> Home</a>
+        <a href="{{ url_for('donor_appointment') }}"><i class="fas fa-calendar-plus"></i> Book Appointment</a>
+        <a href="{{ url_for('donor_eligibility') }}"><i class="fas fa-clipboard-check"></i> Eligibility</a>
+        <a href="{{ url_for('donor_medical') }}"><i class="fas fa-file-medical"></i> Medical Info</a>
+        <a href="{{ url_for('donor_notifications') }}"><i class="fas fa-bell"></i> Alerts
+            {% if unread_notifications and unread_notifications > 0 %}
+            <span class="notification-sidebar-count">{{ unread_notifications }}</span>
+            {% endif %}
+        </a>
+        <hr>
+        <a href="{{ url_for('logout') }}" class="logout-link"><i class="fas fa-sign-out-alt"></i> Logout</a>
+    </nav>
+</div>
+
+<!-- Sidebar Overlay -->
+<div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<div id="main-content">
+    <!-- Compact Hero Section -->
+    <section class="hero-compact">
+        <div class="hero-compact-content">
+            <h1>Welcome, {{ donor.donor_name if donor else 'Donor' }}!</h1>
+            <p>Ready to save lives today?</p>
+            {% if donor and donor.eligibility_status %}
+            <div class="eligibility-badge">
+                <i class="fas fa-check-circle"></i> You are eligible to donate
+            </div>
+            {% else %}
+            <div class="eligibility-badge" style="background: #f8d7da; color: #721c24;">
+                <i class="fas fa-exclamation-circle"></i> Eligibility pending verification
+            </div>
+            {% endif %}
+            <a href="{{ url_for('donor_appointment') }}" class="btn btn-primary">
+                <i class="fas fa-calendar-plus"></i> Make An Appointment
+            </a>
+        </div>
+        <div class="hero-compact-icon">
+            <i class="fas fa-heartbeat" style="font-size: 4rem;"></i>
+        </div>
+    </section>
+
+    <!-- Donor Profile Section -->
+    <section class="profile-section">
+        <div class="card">
+            <h2><i class="fas fa-user-circle"></i> My Profile</h2>
+            <div class="profile-info-grid">
+                <div class="profile-info-item">
+                    <div class="profile-label">
+                        <i class="fas fa-user"></i> Full Name
+                    </div>
+                    <div class="profile-value">
+                        {{ donor.donor_name if donor and donor.donor_name else 'Not provided' }}
+                    </div>
+                </div>
+                <div class="profile-info-item">
+                    <div class="profile-label">
+                        <i class="fas fa-envelope"></i> Email
+                    </div>
+                    <div class="profile-value">
+                        {{ donor.email if donor and donor.email else 'Not provided' }}
+                    </div>
+                </div>
+                <div class="profile-info-item">
+                    <div class="profile-label">
+                        <i class="fas fa-tint"></i> Blood Type
+                    </div>
+                    <div class="profile-value">
+                        {{ donor.blood_type if donor and donor.blood_type else 'Unknown' }}
+                        {% if donor and donor.blood_type %}
+                        <span class="blood-type-info">
+                            {% if donor.blood_type == 'O-' %}(Universal donor){% endif %}
+                            {% if donor.blood_type == 'O+' %}(Most common){% endif %}
+                            {% if donor.blood_type == 'AB+' %}(Universal recipient){% endif %}
+                            {% if donor.blood_type == 'AB-' %}(Rare){% endif %}
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="profile-info-item">
+                    <div class="profile-label">
+                        <i class="fas fa-birthday-cake"></i> Age
+                    </div>
+                    <div class="profile-value">
+                        {{ donor.age if donor and donor.age else 'Not provided' }}
+                    </div>
+                </div>
+                <div class="profile-info-item">
+                    <div class="profile-label">
+                        <i class="fas fa-clipboard-check"></i> Eligibility Status
+                    </div>
+                    <div class="profile-value">
+                        {% if donor and donor.eligibility_status %}
+                        <span class="status-badge eligible">Eligible</span>
+                        {% else %}
+                        <span class="status-badge not-eligible">Not Eligible</span>
+                        {% if donor and donor.disqualification_reason %}
+                        <br><small style="color: #666; font-size: 0.85rem;">
+                            Reason: {{ donor.disqualification_reason }}
+                        </small>
+                        {% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="profile-info-item">
+                    <div class="profile-label">
+                        <i class="fas fa-history"></i> Last Donation
+                    </div>
+                    <div class="profile-value">
+                        {% if donor and donor.last_donation_date %}
+                            {% if donor.last_donation_date is string %}
+                                {{ donor.last_donation_date[:10] }}
+                            {% else %}
+                                {{ donor.last_donation_date.strftime('%B %d, %Y') }}
+                            {% endif %}
+                        {% elif last_donation and last_donation.donation_date %}
+                            {{ last_donation.donation_date.strftime('%B %d, %Y') }}
+                        {% else %}
+                            Never donated
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="profile-info-item">
+                    <div class="profile-label">
+                        <i class="fas fa-calendar-alt"></i> Member Since
+                    </div>
+                    <div class="profile-value">
+                        {% if donor and donor.created_at %}
+                            {% if donor.created_at is string %}
+                                {{ donor.created_at[:10] }}
+                            {% else %}
+                                {{ donor.created_at.strftime('%B %d, %Y') }}
+                            {% endif %}
+                        {% else %}
+                            Recently
+                        {% endif %}
+                    </div>
+                </div>
+            
+                <div class="profile-actions">
+                    <a href="{{ url_for('donor_medical') }}" class="btn btn-outline">
+                        <i class="fas fa-file-medical"></i> Update Medical Info
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Upcoming Appointments -->
+    {% if appointments %}
+    <section class="appointments-section">
+        <h2><i class="fas fa-calendar-alt"></i> Upcoming Appointments</h2>
+        <div class="appointments-grid">
+            {% for appointment in appointments %}
+            <div class="appointment-card">
+                <div class="appointment-header">
+                    <h3>
+                        {% if appointment.event and appointment.event.event_name %}
+                            {{ appointment.event.event_name }}
+                        {% else %}
+                            Blood Donation Event
+                        {% endif %}
+                    </h3>
+                    <span class="appointment-status {{ appointment.status|lower|replace('-', '') }}">
+                        {{ appointment.status }}
+                    </span>
+                </div>
+                <p class="appointment-location">
+                    <i class="fas fa-map-marker-alt"></i> 
+                    {% if appointment.event and appointment.event.location %}
+                        {{ appointment.event.location }}
+                    {% else %}
+                        Location TBD
+                    {% endif %}
+                </p>
+                <p class="appointment-time">
+                    <i class="fas fa-calendar"></i> 
+                    {% if appointment.event and appointment.event.event_date %}
+                        {{ appointment.event.event_date }} at {{ appointment.event.event_time }}
+                    {% else %}
+                        Date/Time TBD
+                    {% endif %}
+                </p>
+                <p class="appointment-registered">
+                    <i class="fas fa-clock"></i> 
+                    Registered: 
+                    {% if appointment.registered_at %}
+                        {% if appointment.registered_at is string %}
+                            {{ appointment.registered_at[:10] }}
+                        {% else %}
+                            {{ appointment.registered_at.strftime('%B %d, %Y') }}
+                        {% endif %}
+                    {% else %}
+                        Recently
+                    {% endif %}
+                </p>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% else %}
+    <section class="appointments-section">
+        <h2><i class="fas fa-calendar-alt"></i> Upcoming Appointments</h2>
+        <div class="appointments-grid">
+            <div class="appointment-card" style="text-align: center; padding: 40px;">
+                <i class="fas fa-calendar-plus fa-3x" style="color: #ddd; margin-bottom: 20px;"></i>
+                <h3 style="color: #666;">No Appointments</h3>
+                <p style="color: #999;">You don't have any upcoming appointments</p>
+                <a href="{{ url_for('donor_appointment') }}" class="btn btn-primary" style="margin-top: 15px;">
+                    <i class="fas fa-calendar-plus"></i> Book Appointment
+                </a>
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
+</div>
+
+<script src="{{ url_for('static', filename='js/donor_script.js') }}"></script>
+
+</body>
+</html>
