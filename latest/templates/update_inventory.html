@@ -68,10 +68,14 @@
             {% endif %}
         {% endwith %}
         
-        <!-- Instructions -->
-        <div class="info-card" style="background: #e3f2fd; border-left: 4px solid #2196f3; margin-bottom: 20px;">
-            <p style="margin: 0; padding: 10px;"><i class="fas fa-info-circle"></i> Update blood inventory quantities. Enter positive numbers only (units of blood).</p>
-        </div>
+    <!-- Instructions -->
+    <div class="info-card" style="background: #e3f2fd; border-left: 4px solid #2196f3; margin-bottom: 20px;">
+        <p style="margin: 0; padding: 10px;">
+            <i class="fas fa-info-circle"></i> 
+            <strong>IMPORTANT:</strong> Enter the <strong>CURRENT TOTAL STOCK</strong> for each blood type. 
+            This will replace the existing quantity with the new value. Do not enter amounts to add or subtract.
+        </p>
+    </div>
         
         <!-- Inventory Table -->
         <div class="table-container">
@@ -79,9 +83,9 @@
                 <thead>
                     <tr>
                         <th>Blood Type</th>
-                        <th>Current Quantity</th>
+                        <th>Current Total Units</th>
                         <th>Last Updated</th>
-                        <th>Update Quantity</th>
+                        <th>Enter New Total</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -112,7 +116,7 @@
                                                class="form-input" 
                                                min="0" 
                                                value="{{ item.quantity }}"
-                                               placeholder="Quantity">
+                                               placeholder="Enter new total units">
                                         <span class="input-unit">units</span>
                                     </div>
                                 </td>
@@ -199,7 +203,11 @@ document.querySelectorAll('.update-btn').forEach(button => {
         const quantity = quantityInput.value;
         
         if (quantity === '' || quantity < 0) {
-            alert('Please enter a valid quantity (0 or greater)');
+            showToast('Please enter a valid total quantity (0 or greater)', 'warning');
+            return;
+        }
+        
+        if (!confirm(`Are you sure you want to set ${bloodType} blood type to ${quantity} total units?\n\nThis will replace the current stock with this new value.`)) {
             return;
         }
         
@@ -221,33 +229,26 @@ document.querySelectorAll('.update-btn').forEach(button => {
             const result = await response.json();
             
             if (result.success) {
-                // Show success message
-                const alertDiv = document.createElement('div');
-                alertDiv.className = 'alert-success';
-                alertDiv.style.backgroundColor = '#d4edda';
-                alertDiv.style.color = '#155724';
-                alertDiv.style.padding = '10px';
-                alertDiv.style.borderRadius = '5px';
-                alertDiv.style.marginBottom = '20px';
-                alertDiv.innerHTML = `
-                    <i class="fas fa-check-circle"></i>
-                    ${bloodType} inventory updated to ${quantity} units.
-                `;
-                document.querySelector('.card').prepend(alertDiv);
+                showToast(`✅ ${bloodType} inventory updated to ${quantity} total units`, 'success');
                 
                 // Update button state
                 this.innerHTML = '<i class="fas fa-check"></i> Updated';
                 this.style.backgroundColor = '#28a745';
                 
-                // Auto remove alert after 3 seconds
+                // Change back after 3 seconds
                 setTimeout(() => {
-                    alertDiv.remove();
+                    this.innerHTML = '<i class="fas fa-save"></i> Update';
+                    this.style.backgroundColor = '';
+                    this.disabled = false;
                 }, 3000);
+                
+                // Log the action
+                console.log(`Updated ${bloodType} to ${quantity} units`);
             } else {
                 throw new Error(result.error || 'Update failed');
             }
         } catch (error) {
-            alert(`Error updating inventory: ${error.message}`);
+            showToast(`Error: ${error.message}`, 'error');
             this.innerHTML = '<i class="fas fa-save"></i> Update';
             this.disabled = false;
         }
@@ -263,8 +264,8 @@ document.getElementById('bulk-update-btn').addEventListener('click', async funct
         return;
     }
     
-    if (!confirm(`Are you sure you want to set ALL blood types to ${quantity} units?`)) {
-        return;
+    if (!confirm(`Are you sure you want to set ALL blood types to ${quantity} total units?\n\nThis will replace all current stocks with this new value.`)) {
+    return;
     }
     
     const originalText = this.innerHTML;
