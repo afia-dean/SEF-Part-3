@@ -64,13 +64,18 @@
         
         <!-- Statistics -->
         <!-- Search and Filter Section -->
-        <div class="search-filter-bar" style="background: white; padding: 15px; border-radius: var(--radius); margin-bottom: 20px; display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+        <div class="search-filter-bar" style="background: white; padding: 15px; border-radius: var(--radius-md); margin-bottom: 20px; display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
             <div style="flex: 1; min-width: 200px;">
-                <input type="text" id="searchRequest" placeholder="Search by hospital..." 
-                    style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                <div class="input-group">
+                    <span class="input-group-text" style="background: #f8f9fa; border: 1px solid #ddd; border-right: none; padding: 10px 15px; border-radius: 4px 0 0 4px;">
+                        <i class="fas fa-search"></i>
+                    </span>
+                    <input type="text" id="searchRequest" placeholder="Search by hospital or ID..." 
+                        style="width: 100%; padding: 10px; border: 1px solid #ddd; border-left: none; border-radius: 0 4px 4px 0;">
+                </div>
             </div>
             <div>
-                <select id="filterStatus" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px; min-width: 120px;">
+                <select id="filterStatus" class="form-select" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px; min-width: 120px;">
                     <option value="">All Status</option>
                     <option value="Pending">Pending</option>
                     <option value="Fulfilled">Fulfilled</option>
@@ -78,7 +83,7 @@
                 </select>
             </div>
             <div>
-                <select id="filterUrgency" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px; min-width: 120px;">
+                <select id="filterUrgency" class="form-select" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px; min-width: 120px;">
                     <option value="">All Urgency</option>
                     <option value="High">High</option>
                     <option value="Medium">Medium</option>
@@ -86,8 +91,8 @@
                 </select>
             </div>
             <div>
-                <button id="clearRequestFilters" class="btn btn-outline" style="padding: 10px 15px;">
-                    <i class="fas fa-times"></i> Clear
+                <button id="clearRequestFilters" class="btn btn-outline" style="padding: 10px 15px; white-space: nowrap;">
+                    <i class="fas fa-times"></i> Clear Filters
                 </button>
             </div>
         </div>
@@ -569,6 +574,107 @@ function showToast(message, type = 'info') {
         toast.remove();
     }, 3000);
 }
+
+// Request filter functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('searchRequest');
+    const statusFilter = document.getElementById('filterStatus');
+    const urgencyFilter = document.getElementById('filterUrgency');
+    const clearBtn = document.getElementById('clearRequestFilters');
+    const table = document.querySelector('.data-table');
+    
+    if (!table) return;
+    
+    function filterRequests() {
+        const searchTerm = searchInput.value.toLowerCase().trim();
+        const status = statusFilter.value;
+        const urgency = urgencyFilter.value;
+        
+        const rows = table.querySelectorAll('tbody tr');
+        let visibleCount = 0;
+        let hasNoResultsRow = false;
+        
+        // Check if no results row already exists
+        if (document.getElementById('noRequestResultsRow')) {
+            hasNoResultsRow = true;
+        }
+        
+        rows.forEach(row => {
+            if (row.id === 'noRequestResultsRow') return;
+            
+            const idCell = row.cells[0];
+            const bloodTypeCell = row.cells[1];
+            const urgencyCell = row.cells[3];
+            const statusCell = row.cells[4];
+            const hospitalCell = row.cells[5];
+            
+            // Get text content for filtering
+            const requestId = idCell.textContent.toLowerCase() || '';
+            const hospitalName = hospitalCell.textContent.toLowerCase() || '';
+            const urgencyText = urgencyCell.textContent.trim();
+            const statusText = statusCell.textContent.trim();
+            
+            // Check search
+            const matchesSearch = searchTerm === '' || 
+                                 requestId.includes(searchTerm) || 
+                                 hospitalName.includes(searchTerm);
+            
+            // Check status filter
+            const matchesStatus = status === '' || 
+                                 statusText === status;
+            
+            // Check urgency filter
+            const matchesUrgency = urgency === '' || 
+                                  urgencyText === urgency;
+            
+            // Show/hide row
+            if (matchesSearch && matchesStatus && matchesUrgency) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+        
+        // Show message if no results
+        const tbody = table.querySelector('tbody');
+        if (visibleCount === 0 && rows.length > 0) {
+            if (!hasNoResultsRow) {
+                const noResultsRow = document.createElement('tr');
+                noResultsRow.id = 'noRequestResultsRow';
+                noResultsRow.innerHTML = `
+                    <td colspan="8" style="text-align: center; padding: 40px; color: #666;">
+                        <i class="fas fa-search fa-2x" style="margin-bottom: 15px; color: #ddd;"></i>
+                        <p>No requests match your filters.</p>
+                        <button class="btn btn-outline" onclick="clearRequestFilters()" style="margin-top: 10px;">
+                            <i class="fas fa-times"></i> Clear Filters
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(noResultsRow);
+            }
+        } else if (hasNoResultsRow) {
+            document.getElementById('noRequestResultsRow').remove();
+        }
+    }
+    
+    // Attach event listeners
+    if (searchInput) searchInput.addEventListener('input', filterRequests);
+    if (statusFilter) statusFilter.addEventListener('change', filterRequests);
+    if (urgencyFilter) urgencyFilter.addEventListener('change', filterRequests);
+    
+    // Clear filters function
+    window.clearRequestFilters = function() {
+        if (searchInput) searchInput.value = '';
+        if (statusFilter) statusFilter.value = '';
+        if (urgencyFilter) urgencyFilter.value = '';
+        filterRequests();
+    };
+    
+    if (clearBtn) {
+        clearBtn.addEventListener('click', clearRequestFilters);
+    }
+});
 </script>
 </body>
 </html>
