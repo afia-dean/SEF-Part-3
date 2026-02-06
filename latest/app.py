@@ -144,8 +144,10 @@ def role_required(required_role):
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        email = request.form.get('email')
-        password = request.form.get('password')
+        email = request.form.get('email', '').strip()
+        password = request.form.get('password', '').strip()
+        
+        print(f"DEBUG: Login attempt for email: {email}")
         
         if not email or not password:
             flash('Please fill in all fields', 'error')
@@ -155,60 +157,80 @@ def login():
             # Check if user exists
             response = supabase.table('users').select('*').eq('email', email).execute()
             
+            print(f"DEBUG: Supabase response: {response}")
+            
             if not response.data:
+                print(f"DEBUG: No user found with email: {email}")
                 flash('Invalid email or password', 'error')
                 return render_template('login.html')
             
             user = response.data[0]
-            password_hash = hash_password(password)
+            print(f"DEBUG: User found: {user}")
             
-            if user['password'] != password_hash:
+            # Check password
+            password_hash = hash_password(password)
+            stored_hash = user.get('password', '')
+            
+            print(f"DEBUG: Input password: {password}")
+            print(f"DEBUG: Input hash: {password_hash}")
+            print(f"DEBUG: Stored hash: {stored_hash}")
+            print(f"DEBUG: Match: {password_hash == stored_hash}")
+            
+            if password_hash != stored_hash:
+                print("DEBUG: Password mismatch")
                 flash('Invalid email or password', 'error')
                 return render_template('login.html')
             
-            # Set session
+            # Set session - FIXED: no full_name in users table
             session['user_id'] = user['id']
             session['email'] = user['email']
             session['role'] = user['role']
-            session['full_name'] = user.get('full_name', '')
+            # session['full_name'] = user.get('full_name', '')  # REMOVE THIS
+            
+            print(f"DEBUG: Session set - user_id: {session['user_id']}, role: {session['role']}")
             
             # Set role-specific session data
             if user['role'] == 'staff':
                 staff_response = supabase.table('staff').select('*').eq('user_id', user['id']).execute()
                 if staff_response.data:
                     session['staff_id'] = staff_response.data[0]['id']
-                    session['staff_name'] = staff_response.data[0].get('staff_name', user['full_name'])
+                    session['staff_name'] = staff_response.data[0].get('staff_name', 'Staff')
+                    session['full_name'] = staff_response.data[0].get('staff_name', 'Staff')
             
             elif user['role'] == 'donor':
                 donor_response = supabase.table('donors').select('*').eq('user_id', user['id']).execute()
                 if donor_response.data:
                     session['donor_id'] = donor_response.data[0]['id']
-                    session['donor_name'] = donor_response.data[0].get('donor_name', user['full_name'])
+                    session['donor_name'] = donor_response.data[0].get('donor_name', 'Donor')
+                    session['full_name'] = donor_response.data[0].get('donor_name', 'Donor')
             
             elif user['role'] == 'organizer':
-                organizer_response = supabase.table('organizers').select('*').eq('user_id', user['id']).execute()
+                organizer_response = supabase.table('organizer').select('*').eq('user_id', user['id']).execute()  # FIXED: singular 'organizer'
                 if organizer_response.data:
                     session['organizer_id'] = organizer_response.data[0]['id']
-                    session['organizer_name'] = organizer_response.data[0].get('organizer_name', user['full_name'])
+                    session['organizer_name'] = organizer_response.data[0].get('organizer_name', 'Organizer')
+                    session['full_name'] = organizer_response.data[0].get('organizer_name', 'Organizer')
             
             elif user['role'] == 'admin':
                 admin_response = supabase.table('admin').select('*').eq('user_id', user['id']).execute()
                 if admin_response.data:
                     session['admin_id'] = admin_response.data[0]['id']
                     session['admin_name'] = admin_response.data[0].get('admin_name', 'Administrator')
-                    # ADD THIS LINE:
+                    session['full_name'] = admin_response.data[0].get('admin_name', 'Administrator')
                     session['admin_status'] = admin_response.data[0].get('status', True)
                 else:
                     # Fallback if no admin record exists
                     session['admin_id'] = user['id']
                     session['admin_name'] = 'Administrator'
+                    session['full_name'] = 'Administrator'
                     session['admin_status'] = True
 
             flash('Login successful!', 'success')
+            print(f"DEBUG: Login successful for {email} as {session['role']}")
             
             # Redirect based on role
             if user['role'] == 'admin':
-                return redirect(url_for('admin_dashboard'))
+                return redirect(url_for('dashboard'))  # Changed from 'admin_dashboard'
             elif user['role'] == 'staff':
                 return redirect(url_for('staff_dashboard'))
             elif user['role'] == 'donor':
@@ -220,6 +242,8 @@ def login():
                 
         except Exception as e:
             print(f"Login error: {e}")
+            import traceback
+            traceback.print_exc()
             flash('Login failed. Please try again.', 'error')
     
     return render_template('login.html')
@@ -261,69 +285,86 @@ def register():
             
             # Hash password
             password_hash = hash_password(password)
+            print(f"DEBUG: Creating user with hash: {password_hash}")
             
-            # Insert user into database
+            # Insert user into database - ONLY fields that exist in users table
             user_data = {
-            "email": email,
-            "password": password_hash,
-            "role": role,
-            "created_at": now_iso()
-}
-            
-            # Add role-specific fields
-            if role == 'donor':
-                user_data["blood_type"] = request.form.get("blood_type", "")
-                age = request.form.get("age", "")
-                if age.isdigit():
-                    user_data["age"] = int(age)
-                user_data["medical_history"] = request.form.get("medical_history", "")
-                user_data["eligibility_status"] = False
-                user_data["disqualification_reason"] = "Pending verification"
-                
-            elif role == 'staff':
-                user_data["hospital_name"] = request.form.get("hospital_name", "")
+                "email": email,
+                "password": password_hash,
+                "role": role,
+                "created_at": now_iso()
+            }
             
             # Insert into users table
             result = supabase.table("users").insert(user_data).execute()
             
-            # Create role-specific record if needed
-            if role == 'donor' and result.data:
+            if not result.data:
+                flash('Failed to create user account', 'error')
+                return render_template('register.html')
+            
+            user_id = result.data[0]['id']
+            print(f"DEBUG: User created with ID: {user_id}")
+            
+            # Create role-specific record
+            if role == 'donor':
                 donor_data = {
-                    'user_id': result.data[0]['id'],
+                    'user_id': user_id,
                     'donor_name': full_name,
                     'email': email,
-                    'blood_type': user_data.get('blood_type', 'Unknown'),
-                    'age': user_data.get('age'),
-                    'medical_history': user_data.get('medical_history', ''),
-                    'eligibility_status': user_data.get('eligibility_status', False),
-                    'disqualification_reason': user_data.get('disqualification_reason', ''),
+                    'blood_type': request.form.get("blood_type", "Unknown"),
+                    'eligibility_status': False,
+                    'disqualification_reason': 'Pending verification',
                     'created_at': now_iso()
                 }
+                
+                age = request.form.get("age", "")
+                if age.isdigit():
+                    donor_data['age'] = int(age)
+                
+                medical_history = request.form.get("medical_history", "")
+                if medical_history:
+                    donor_data['medical_history'] = medical_history
+                
                 supabase.table('donors').insert(donor_data).execute()
+                print(f"DEBUG: Donor record created")
             
-            elif role == 'staff' and result.data:
+            elif role == 'staff':
                 staff_data = {
-                    'user_id': result.data[0]['id'],
+                    'user_id': user_id,
                     'staff_name': full_name,
-                    'email': email,
-                    'hospital_name': user_data.get('hospital_name', ''),
+                    'hospital_name': request.form.get("hospital_name", "Unknown Hospital"),
                     'created_at': now_iso()
                 }
                 supabase.table('staff').insert(staff_data).execute()
+                print(f"DEBUG: Staff record created")
             
-            elif role == 'organizer' and result.data:
+            elif role == 'organizer':
                 organizer_data = {
-                    'user_id': result.data[0]['id'],
+                    'user_id': user_id,
                     'organizer_name': full_name,
-                    'email': email,
                     'created_at': now_iso()
                 }
-                supabase.table('organizers').insert(organizer_data).execute()
+                supabase.table('organizer').insert(organizer_data).execute()  # FIXED: singular 'organizer'
+                print(f"DEBUG: Organizer record created")
+            
+            elif role == 'admin':
+                admin_data = {
+                    'user_id': user_id,
+                    'admin_name': full_name,
+                    'role': 'admin',
+                    'status': True,
+                    'created_at': now_iso()
+                }
+                supabase.table('admin').insert(admin_data).execute()
+                print(f"DEBUG: Admin record created")
             
             flash("Registration successful! Please login.", "success")
             return redirect(url_for("login"))
             
         except Exception as e:
+            print(f"Registration error: {e}")
+            import traceback
+            traceback.print_exc()
             flash(f"Registration failed: {str(e)}", "error")
             return render_template("register.html")
     
