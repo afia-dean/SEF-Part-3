@@ -348,22 +348,22 @@ document.addEventListener('DOMContentLoaded', function() {
         tableRows.forEach(row => {
             const name = row.cells[0].textContent.toLowerCase();
             const email = row.cells[0].querySelector('small')?.textContent.toLowerCase() || '';
-            const bloodTypeCell = row.cells[1].textContent;
-            const eligibilityCell = row.cells[3].textContent;
+            const bloodTypeCell = row.cells[1].textContent.trim();
+            const eligibilityCell = row.cells[3].textContent.toLowerCase();
             
             const matchesSearch = name.includes(searchTerm) || email.includes(searchTerm);
             const matchesBloodType = !bloodType || bloodTypeCell === bloodType;
             const matchesEligibility = !eligibility || 
-                (eligibility === 'eligible' && eligibilityCell.includes('Eligible')) ||
-                (eligibility === 'not-eligible' && eligibilityCell.includes('Not Eligible'));
+                (eligibility === 'eligible' && eligibilityCell.includes('eligible')) ||
+                (eligibility === 'not-eligible' && eligibilityCell.includes('not eligible'));
             
             row.style.display = (matchesSearch && matchesBloodType && matchesEligibility) ? '' : 'none';
         });
     }
     
-    searchInput.addEventListener('input', filterDonors);
-    bloodTypeFilter.addEventListener('change', filterDonors);
-    eligibilityFilter.addEventListener('change', filterDonors);
+    if (searchInput) searchInput.addEventListener('input', filterDonors);
+    if (bloodTypeFilter) bloodTypeFilter.addEventListener('change', filterDonors);
+    if (eligibilityFilter) eligibilityFilter.addEventListener('change', filterDonors);
     
     if (clearBtn) {
         clearBtn.addEventListener('click', () => {
