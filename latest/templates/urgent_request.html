@@ -4,6 +4,8 @@
     <title>Create Request - BloodLink</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/staff_style.css') }}">
+    <!-- Add Bootstrap for toast -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body>
 <header>
@@ -70,7 +72,14 @@
         
         <!-- Instructions -->
         <div class="info-card" style="background: #fff3cd; border-left: 4px solid #ffc107; margin-bottom: 20px;">
-            <p style="margin: 0; padding: 10px;"><i class="fas fa-info-circle"></i> Use this form to create urgent blood requests. These requests will be sent as notifications to matching donors.</p>
+            <p style="margin: 0; padding: 10px;">
+                <i class="fas fa-info-circle"></i> 
+                <strong>URGENT REQUEST NOTIFICATIONS:</strong> 
+                When you submit this request, notifications will be automatically sent to ALL eligible donors with the matching blood type.
+                <br>
+                <i class="fas fa-bell" style="color: #c00;"></i> 
+                Donors will receive immediate alerts about this urgent need.
+            </p>
         </div>
         
         <!-- Request Form -->
@@ -185,6 +194,18 @@
                     <p style="color: #666; margin: 0;"><i>No notes provided</i></p>
                 </div>
             </div>
+
+            <!-- Live Donor Count -->
+            <div class="donor-count-card" style="background: #f8f9fa; border-radius: var(--radius); padding: 20px; margin-bottom: 30px; border-left: 4px solid #28a745;">
+                <h3 style="color: #28a745; margin-bottom: 15px;"><i class="fas fa-users"></i> Live Donor Match Count</h3>
+                <div id="donorCountInfo" style="text-align: center;">
+                    <div style="font-size: 2.5rem; color: #28a745; font-weight: bold;" id="donorCount">--</div>
+                    <small style="color: #666;">eligible donors with selected blood type</small>
+                    <p style="margin-top: 10px; font-size: 0.9rem; color: #666;" id="donorCountMessage">
+                        Select a blood type to see how many donors will be notified
+                    </p>
+                </div>
+            </div>
             
             <!-- Form Actions -->
             <div style="display: flex; gap: 15px; justify-content: flex-end;">
@@ -218,99 +239,214 @@
     </div>
 </div>
 
+<!-- Toast Container -->
+<div id="toastContainer" class="toast-container position-fixed top-0 end-0 p-3"></div>
+
+<!-- Add Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="{{ url_for('static', filename='js/staff_main.js') }}"></script>
+
 <script>
-// Real-time preview updates
-const form = document.getElementById('urgentRequestForm');
-const previewBloodType = document.getElementById('previewBloodType');
-const previewUnits = document.getElementById('previewUnits');
-const previewUrgency = document.getElementById('previewUrgency');
-const previewNotes = document.getElementById('previewNotes');
-const submitBtn = document.getElementById('submitBtn');
+// ============================================
+// URGENT REQUEST PAGE SPECIFIC JAVASCRIPT
+// ============================================
 
-// Update preview on form changes
-form.addEventListener('input', function() {
-    // Update blood type preview
-    const bloodType = form.querySelector('[name="blood_type"]').value;
-    previewBloodType.textContent = bloodType || '--';
-    previewBloodType.style.color = bloodType ? '#c00' : '#666';
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('urgentRequestForm');
+    const previewBloodType = document.getElementById('previewBloodType');
+    const previewUnits = document.getElementById('previewUnits');
+    const previewUrgency = document.getElementById('previewUrgency');
+    const previewNotes = document.getElementById('previewNotes');
+    const submitBtn = document.getElementById('submitBtn');
+    const donorCountElement = document.getElementById('donorCount');
+    const donorCountMessage = document.getElementById('donorCountMessage');
     
-    // Update units preview
-    const units = form.querySelector('[name="units_needed"]').value;
-    previewUnits.textContent = units || '--';
-    previewUnits.style.color = units ? '#ff9800' : '#666';
-    
-    // Update urgency preview
-    const urgency = form.querySelector('[name="urgency_level"]').value;
-    previewUrgency.textContent = urgency || '--';
-    
-    if (urgency === 'High') {
-        previewUrgency.style.color = '#dc3545';
-    } else if (urgency === 'Medium') {
-        previewUrgency.style.color = '#ffc107';
-    } else if (urgency === 'Low') {
-        previewUrgency.style.color = '#17a2b8';
-    } else {
-        previewUrgency.style.color = '#666';
+    let fetchTimeout;
+
+    // Function to fetch donor count
+    async function fetchDonorCount(bloodType) {
+        if (!bloodType) {
+            donorCountElement.textContent = '--';
+            donorCountMessage.innerHTML = `
+                <i class="fas fa-info-circle"></i>
+                Select a blood type to see how many donors will be notified
+            `;
+            return;
+        }
+        
+        donorCountElement.textContent = '...';
+        donorCountMessage.innerHTML = `
+            <i class="fas fa-spinner fa-spin"></i>
+            Fetching donor count...
+        `;
+        
+        try {
+            // URL encode the blood type (especially for A+, B+, etc.)
+            const encodedBloodType = encodeURIComponent(bloodType);
+            console.log(`DEBUG: Fetching donor count for blood type: ${bloodType}`);
+            
+            const response = await fetch(`/api/donors/count/${encodedBloodType}`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            console.log(`DEBUG: API Response:`, result);
+            
+            if (result.success) {
+                const count = result.count || 0;
+                donorCountElement.textContent = count;
+                
+                if (count === 0) {
+                    donorCountMessage.innerHTML = `
+                        <i class="fas fa-exclamation-triangle" style="color: #ffc107;"></i>
+                        No eligible donors found with ${bloodType} blood type
+                    `;
+                } else if (count === 1) {
+                    donorCountMessage.innerHTML = `
+                        <i class="fas fa-user" style="color: #28a745;"></i>
+                        ${count} donor will be notified
+                    `;
+                } else {
+                    donorCountMessage.innerHTML = `
+                        <i class="fas fa-users" style="color: #28a745;"></i>
+                        ${count} donors will be notified
+                    `;
+                }
+            } else {
+                throw new Error(result.error || 'Failed to fetch donor count');
+            }
+        } catch (error) {
+            console.error('Error fetching donor count:', error);
+            donorCountElement.textContent = '--';
+            donorCountMessage.innerHTML = `
+                <i class="fas fa-exclamation-circle" style="color: #dc3545;"></i>
+                Error fetching donor count: ${error.message}
+            `;
+        }
+    }
+
+    // Update preview on form changes
+    if (form) {
+        form.addEventListener('input', function() {
+            // Update blood type preview
+            const bloodType = form.querySelector('[name="blood_type"]').value;
+            previewBloodType.textContent = bloodType || '--';
+            previewBloodType.style.color = bloodType ? '#c00' : '#666';
+            
+            // Update donor count when blood type changes
+            if (bloodType) {
+                // Clear previous timeout
+                if (fetchTimeout) {
+                    clearTimeout(fetchTimeout);
+                }
+                
+                // Debounce the API call
+                fetchTimeout = setTimeout(() => {
+                    fetchDonorCount(bloodType);
+                }, 300); // Wait 300ms after last change
+            }
+            
+            // Update units preview
+            const units = form.querySelector('[name="units_needed"]').value;
+            previewUnits.textContent = units || '--';
+            previewUnits.style.color = units ? '#ff9800' : '#666';
+            
+            // Update urgency preview
+            const urgency = form.querySelector('[name="urgency_level"]').value;
+            previewUrgency.textContent = urgency || '--';
+            
+            if (urgency === 'High') {
+                previewUrgency.style.color = '#dc3545';
+            } else if (urgency === 'Medium') {
+                previewUrgency.style.color = '#ffc107';
+            } else if (urgency === 'Low') {
+                previewUrgency.style.color = '#17a2b8';
+            } else {
+                previewUrgency.style.color = '#666';
+            }
+            
+            // Update notes preview
+            const notes = form.querySelector('[name="notes"]').value;
+            const patientInfo = form.querySelector('[name="patient_info"]').value;
+            
+            let previewText = '';
+            if (patientInfo) {
+                previewText += `<strong>Patient:</strong> ${patientInfo}<br>`;
+            }
+            if (notes) {
+                previewText += `<strong>Notes:</strong> ${notes}`;
+            }
+            
+            if (previewText) {
+                previewNotes.innerHTML = previewText;
+            } else {
+                previewNotes.innerHTML = '<p style="color: #666; margin: 0;"><i>No notes provided</i></p>';
+            }
+        });
+    }
+
+    // Initial update if there's a pre-selected blood type
+    const initialBloodType = form.querySelector('[name="blood_type"]').value;
+    if (initialBloodType) {
+        fetchDonorCount(initialBloodType);
     }
     
-    // Update notes preview
-    const notes = form.querySelector('[name="notes"]').value;
-    const patientInfo = form.querySelector('[name="patient_info"]').value;
+    // Set minimum date/time for required_by field
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
     
-    let previewText = '';
-    if (patientInfo) {
-        previewText += `<strong>Patient:</strong> ${patientInfo}<br>`;
+    const minDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
+    const requiredByInput = form.querySelector('[name="required_by"]');
+    if (requiredByInput) {
+        requiredByInput.min = minDateTime;
     }
-    if (notes) {
-        previewText += `<strong>Notes:</strong> ${notes}`;
-    }
-    
-    if (previewText) {
-        previewNotes.innerHTML = previewText;
-    } else {
-        previewNotes.innerHTML = '<p style="color: #666; margin: 0;"><i>No notes provided</i></p>';
+
+    // Form validation and submission
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Validate form
+            const bloodType = form.querySelector('[name="blood_type"]').value;
+            const units = form.querySelector('[name="units_needed"]').value;
+            const urgency = form.querySelector('[name="urgency_level"]').value;
+            
+            if (!bloodType || !units || !urgency) {
+                window.showToast('Please fill in all required fields (Blood Type, Units Required, Urgency Level)', 'warning');
+                return;
+            }
+            
+            // Get donor count for the confirmation message
+            const donorCount = donorCountElement.textContent;
+            const donorCountText = donorCount === '--' || donorCount === '...' ? 
+                'matching donors' : 
+                `${donorCount} matching donor${donorCount === '1' ? '' : 's'}`;
+            
+            // Show confirmation about notifications
+            const confirmationMessage = `Submit this urgent blood request?\n\n📋 Request Details:\n• Blood Type: ${bloodType}\n• Units Needed: ${units}\n• Urgency Level: ${urgency}\n\n🔔 Notifications:\nThis will send notifications to ${donorCountText} with ${bloodType} blood type.\n\nClick OK to proceed or Cancel to review.`;
+            
+            if (!confirm(confirmationMessage)) {
+                return;
+            }
+            
+            // Show loading state
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Request...';
+            submitBtn.disabled = true;
+            
+            // Submit form
+            setTimeout(() => {
+                form.submit();
+            }, 500);
+        });
     }
 });
-
-// Form validation and submission
-form.addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    // Validate form
-    const bloodType = form.querySelector('[name="blood_type"]').value;
-    const units = form.querySelector('[name="units_needed"]').value;
-    const urgency = form.querySelector('[name="urgency_level"]').value;
-    
-    if (!bloodType || !units || !urgency) {
-        alert('Please fill in all required fields (Blood Type, Units Required, Urgency Level)');
-        return;
-    }
-    
-    // Show loading state
-    const originalText = submitBtn.innerHTML;
-    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
-    submitBtn.disabled = true;
-    
-    // Submit form
-    setTimeout(() => {
-        form.submit();
-    }, 1000);
-});
-
-// Set minimum date/time for required_by field
-const now = new Date();
-const year = now.getFullYear();
-const month = String(now.getMonth() + 1).padStart(2, '0');
-const day = String(now.getDate()).padStart(2, '0');
-const hours = String(now.getHours()).padStart(2, '0');
-const minutes = String(now.getMinutes()).padStart(2, '0');
-
-const minDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
-const requiredByInput = form.querySelector('[name="required_by"]');
-if (requiredByInput) {
-    requiredByInput.min = minDateTime;
-}
 </script>
 </body>
 </html>
