@@ -86,7 +86,7 @@
         <div class="search-filter-bar" style="background: white; padding: 15px; border-radius: var(--radius); margin-bottom: 20px; display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
             <div style="flex: 1; min-width: 200px;">
                 <input type="text" id="searchDonor" placeholder="Search by name or email..." 
-                       style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                    style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
             </div>
             <div>
                 <select id="filterBloodType" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px; min-width: 120px;">
@@ -336,42 +336,107 @@ document.addEventListener('DOMContentLoaded', function() {
     const bloodTypeFilter = document.getElementById('filterBloodType');
     const eligibilityFilter = document.getElementById('filterEligibility');
     const clearBtn = document.getElementById('clearFilters');
-    const tableRows = document.querySelectorAll('#donorsTable tbody tr');
+    const table = document.getElementById('donorsTable');
     
-    if (!searchInput || !tableRows.length) return;
+    if (!table) return;
     
     function filterDonors() {
-        const searchTerm = searchInput.value.toLowerCase();
+        const searchTerm = searchInput.value.toLowerCase().trim();
         const bloodType = bloodTypeFilter.value;
         const eligibility = eligibilityFilter.value;
         
-        tableRows.forEach(row => {
-            const name = row.cells[0].textContent.toLowerCase();
-            const email = row.cells[0].querySelector('small')?.textContent.toLowerCase() || '';
-            const bloodTypeCell = row.cells[1].textContent.trim();
-            const eligibilityCell = row.cells[3].textContent.toLowerCase();
+        const rows = table.querySelectorAll('tbody tr');
+        let visibleCount = 0;
+        let hasNoResultsRow = false;
+        
+        // Check if no results row already exists
+        if (document.getElementById('noResultsRow')) {
+            hasNoResultsRow = true;
+        }
+        
+        rows.forEach(row => {
+            if (row.id === 'noResultsRow') return;
             
-            const matchesSearch = name.includes(searchTerm) || email.includes(searchTerm);
-            const matchesBloodType = !bloodType || bloodTypeCell === bloodType;
-            const matchesEligibility = !eligibility || 
-                (eligibility === 'eligible' && eligibilityCell.includes('eligible')) ||
-                (eligibility === 'not-eligible' && eligibilityCell.includes('not eligible'));
+            const nameCell = row.cells[0];
+            const bloodTypeCell = row.cells[1];
+            const eligibilityCell = row.cells[3];
             
-            row.style.display = (matchesSearch && matchesBloodType && matchesEligibility) ? '' : 'none';
+            // Get text content for filtering
+            const donorName = nameCell.querySelector('strong')?.textContent.toLowerCase() || '';
+            const donorEmail = nameCell.querySelector('small')?.textContent.toLowerCase() || '';
+            const bloodTypeText = bloodTypeCell.textContent.trim();
+            const eligibilityText = eligibilityCell.textContent.toLowerCase();
+            
+            // Check search
+            const matchesSearch = searchTerm === '' || 
+                                 donorName.includes(searchTerm) || 
+                                 donorEmail.includes(searchTerm);
+            
+            // Check blood type filter
+            const matchesBloodType = bloodType === '' || 
+                                    bloodTypeText === bloodType;
+            
+            // Check eligibility filter
+            let matchesEligibility = true;
+            if (eligibility === 'eligible') {
+                matchesEligibility = eligibilityText.includes('eligible') && !eligibilityText.includes('not');
+            } else if (eligibility === 'not-eligible') {
+                matchesEligibility = eligibilityText.includes('not eligible');
+            }
+            
+            // Show/hide row
+            if (matchesSearch && matchesBloodType && matchesEligibility) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
         });
+        
+        // Show message if no results
+        const tbody = table.querySelector('tbody');
+        if (visibleCount === 0 && rows.length > 0) {
+            if (!hasNoResultsRow) {
+                const noResultsRow = document.createElement('tr');
+                noResultsRow.id = 'noResultsRow';
+                noResultsRow.innerHTML = `
+                    <td colspan="6" style="text-align: center; padding: 40px; color: #666;">
+                        <i class="fas fa-search fa-2x" style="margin-bottom: 15px; color: #ddd;"></i>
+                        <p>No donors match your filters.</p>
+                        <button class="btn btn-outline" onclick="clearDonorFilters()" style="margin-top: 10px;">
+                            <i class="fas fa-times"></i> Clear Filters
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(noResultsRow);
+            }
+        } else if (hasNoResultsRow) {
+            document.getElementById('noResultsRow').remove();
+        }
     }
     
+    // Attach event listeners
     if (searchInput) searchInput.addEventListener('input', filterDonors);
     if (bloodTypeFilter) bloodTypeFilter.addEventListener('change', filterDonors);
     if (eligibilityFilter) eligibilityFilter.addEventListener('change', filterDonors);
     
+    // Clear filters function
+    window.clearDonorFilters = function() {
+        if (searchInput) searchInput.value = '';
+        if (bloodTypeFilter) bloodTypeFilter.value = '';
+        if (eligibilityFilter) eligibilityFilter.value = '';
+        filterDonors();
+    };
+    
     if (clearBtn) {
-        clearBtn.addEventListener('click', () => {
-            searchInput.value = '';
-            bloodTypeFilter.value = '';
-            eligibilityFilter.value = '';
-            tableRows.forEach(row => row.style.display = '');
-        });
+        clearBtn.addEventListener('click', clearDonorFilters);
+    }
+    
+    // Initialize filters if there are URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('blood_type')) {
+        bloodTypeFilter.value = urlParams.get('blood_type');
+        filterDonors();
     }
 });
 
