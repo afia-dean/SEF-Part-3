@@ -548,6 +548,7 @@ function showToast(message, type = 'info') {
     }, 5000);
 }
 
+
 // Add global helper functions
 window.formatDate = formatDate;
 window.timeSince = timeSince;
