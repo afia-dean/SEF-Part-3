@@ -874,7 +874,6 @@ def add_donor():
                 'email': email,
                 'password': password_hash,
                 'role': 'donor',
-                'full_name': donor_name,
                 'status': 'active',
                 'created_at': datetime.now().isoformat()
             }).execute()
@@ -2267,3 +2266,4 @@ if __name__ == '__main__':
     print("=" * 40)
 
     app.run(debug=True, port=5000)
+
