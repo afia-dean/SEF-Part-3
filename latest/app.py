@@ -730,18 +730,40 @@ def staff_dashboard():
 @role_required('staff')
 def view_inventory():
     try:
-        response = supabase.table('inventory').select('*').order('blood_type').execute()
-        inventory = response.data
-        
+        # First, get all blood types that should exist
         blood_types = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
+        
+        # Get existing inventory
+        response = supabase.table('inventory').select('*').order('blood_type').execute()
+        inventory_data = response.data if response.data else []
+        
+        # Create a dictionary for quick lookup
+        inventory_dict = {item['blood_type']: item for item in inventory_data}
+        
+        # Build the final inventory list with all blood types
+        inventory = []
+        for blood_type in blood_types:
+            if blood_type in inventory_dict:
+                inventory.append(inventory_dict[blood_type])
+            else:
+                # Create placeholder for missing blood types
+                inventory.append({
+                    'blood_type': blood_type,
+                    'quantity': 0,
+                    'updated_at': None,
+                    'id': None
+                })
         
         return render_template('update_inventory.html', 
                              inventory=inventory,
                              blood_types=blood_types)
         
     except Exception as e:
+        print(f"Error loading inventory: {e}")
         flash('Error loading inventory', 'error')
-        return render_template('update_inventory.html', inventory=[], blood_types=[])
+        return render_template('update_inventory.html', 
+                             inventory=[], 
+                             blood_types=['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'])
 
 @app.route('/staff/inventory/update', methods=['POST'])
 @role_required('staff')
@@ -754,25 +776,47 @@ def update_inventory():
         if not blood_type or quantity is None:
             return jsonify({'success': False, 'error': 'Missing required fields'}), 400
         
+        # Validate quantity is a positive number
+        try:
+            quantity = int(quantity)
+            if quantity < 0:
+                return jsonify({'success': False, 'error': 'Quantity cannot be negative'}), 400
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Quantity must be a number'}), 400
+        
+        # Get current quantity for logging
         existing = supabase.table('inventory').select('*').eq('blood_type', blood_type).execute()
         
         if existing.data:
+            old_quantity = existing.data[0].get('quantity', 0)
+            # Update existing record
             response = supabase.table('inventory').update({
                 'quantity': quantity,
                 'last_updated_by': session.get('staff_id'),
                 'updated_at': datetime.now().isoformat()
             }).eq('blood_type', blood_type).execute()
+            
+            # Log the change
+            print(f"Inventory update: {blood_type} changed from {old_quantity} to {quantity} units")
+            
         else:
+            # Create new record
             response = supabase.table('inventory').insert({
                 'blood_type': blood_type,
                 'quantity': quantity,
                 'last_updated_by': session.get('staff_id'),
                 'updated_at': datetime.now().isoformat()
             }).execute()
+            
+            print(f"Inventory update: {blood_type} created with {quantity} units")
         
-        return jsonify({'success': True, 'message': 'Inventory updated successfully'})
+        return jsonify({
+            'success': True, 
+            'message': f'Inventory updated: {blood_type} set to {quantity} units'
+        })
         
     except Exception as e:
+        print(f"Error updating inventory: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/staff/donors', methods=['GET'])
@@ -2221,4 +2265,5 @@ if __name__ == '__main__':
     print("Starting server...")
     print("Open your browser to: http://localhost:5000")
     print("=" * 40)
+
     app.run(debug=True, port=5000)
