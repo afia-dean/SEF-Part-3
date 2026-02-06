@@ -1400,11 +1400,15 @@ def donor_appointment():
         
         donor = donor_response.data[0]
         
-        # Get ALL events from events table
+        # Get only properly created events (with organizer_id)
+        # Option 1: Try this first (simplest)
         events_response = supabase.table('events').select('*').order('event_date').execute()
-        events = events_response.data if events_response.data else []
+        all_events = events_response.data if events_response.data else []
         
-        print(f"DEBUG: Found {len(events)} events in database")
+        # Filter in Python to avoid syntax issues
+        events = [event for event in all_events if event.get('organizer_id') is not None]
+        
+        print(f"DEBUG: Found {len(events)} events with organizer_id")
         
         # Get existing registrations for this donor
         registered_event_ids = []
