@@ -1616,49 +1616,97 @@ def donor_notifications():
 @role_required('donor')
 def get_donor_notifications():
     try:
-        notifications_response = supabase.table('notifications').select('*').execute()
+        # Get current donor's user_id from session
+        user_id = session.get('user_id')
+        
+        if not user_id:
+            return jsonify({'success': False, 'error': 'User not authenticated'}), 401
+        
+        # Filter notifications by the current donor's user_id
+        notifications_response = supabase.table('notifications')\
+            .select('*')\
+            .eq('user_id', user_id)\
+            .order('created_at', desc=True)\
+            .execute()
+        
+        print(f"DEBUG: Fetching notifications for user_id: {user_id}")
+        print(f"DEBUG: Found {len(notifications_response.data) if notifications_response.data else 0} notifications")
         
         if notifications_response.data:
             formatted_notifications = []
             for notification in notifications_response.data:
+                # Format notification for frontend
                 formatted_notifications.append({
                     'id': notification.get('id'),
-                    'title': 'Notification',
+                    'user_id': notification.get('user_id'),
+                    'title': notification.get('title') or 'Notification',
                     'message': notification.get('message', ''),
+                    'type': notification.get('notification_type', 'info'),
                     'status': 'read' if notification.get('status') else 'unread',
                     'read': notification.get('status', False),
-                    'created_at': datetime.now().isoformat()
+                    'created_at': notification.get('created_at', datetime.now().isoformat()),
+                    'timestamp': notification.get('created_at', datetime.now().isoformat())
                 })
             
             return jsonify({
                 'success': True,
-                'notifications': formatted_notifications
+                'notifications': formatted_notifications,
+                'unread_count': sum(1 for n in formatted_notifications if not n['read'])
             })
         else:
             return jsonify({
                 'success': True,
-                'notifications': []
+                'notifications': [],
+                'unread_count': 0
             })
         
     except Exception as e:
         print(f"Error fetching notifications: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/donor/notifications/mark-read', methods=['POST'])
 @role_required('donor')
 def mark_notification_read():
     try:
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'success': False, 'error': 'User not authenticated'}), 401
+        
         data = request.get_json()
         notification_id = data.get('notification_id')
         
         if not notification_id:
             return jsonify({'success': False, 'error': 'Notification ID required'}), 400
         
-        response = supabase.table('notifications').update({
-            'status': True
-        }).eq('id', notification_id).execute()
+        # First, verify this notification belongs to the current user
+        verify_response = supabase.table('notifications')\
+            .select('id')\
+            .eq('id', notification_id)\
+            .eq('user_id', user_id)\
+            .execute()
         
-        return jsonify({'success': True, 'message': 'Notification marked as read'})
+        if not verify_response.data:
+            return jsonify({'success': False, 'error': 'Notification not found or access denied'}), 404
+        
+        # Mark only THIS notification as read for THIS user
+        response = supabase.table('notifications')\
+            .update({
+                'status': True,
+                'read_at': datetime.now().isoformat()
+            })\
+            .eq('id', notification_id)\
+            .eq('user_id', user_id)\
+            .execute()
+        
+        print(f"DEBUG: Marked notification {notification_id} as read for user {user_id}")
+        
+        return jsonify({
+            'success': True, 
+            'message': 'Notification marked as read',
+            'notification_id': notification_id
+        })
         
     except Exception as e:
         print(f"Error marking notification: {e}")
@@ -1666,13 +1714,30 @@ def mark_notification_read():
 
 @app.route('/donor/notifications/mark-all-read', methods=['POST'])
 @role_required('donor')
-def mark_all_notifications_read():
+def mark_all_notifications_read_fixed():  # Changed function name to avoid conflict
     try:
-        response = supabase.table('notifications').update({
-            'status': True
-        }).eq('status', False).execute()
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'success': False, 'error': 'User not authenticated'}), 401
         
-        return jsonify({'success': True, 'message': 'All notifications marked as read'})
+        # Mark only THIS user's unread notifications as read
+        response = supabase.table('notifications')\
+            .update({
+                'status': True,
+                'read_at': datetime.now().isoformat()
+            })\
+            .eq('user_id', user_id)\
+            .eq('status', False)\
+            .execute()
+        
+        count = len(response.data) if response.data else 0
+        print(f"DEBUG: Marked {count} notifications as read for user {user_id}")
+        
+        return jsonify({
+            'success': True, 
+            'message': f'{count} notifications marked as read',
+            'count': count
+        })
         
     except Exception as e:
         print(f"Error marking all notifications: {e}")
@@ -1877,30 +1942,15 @@ def view_registrations():
             
             if registrations_response.data:
                 for reg in registrations_response.data:
-                    # Create a new dict with registration data
-                    registration_data = {
-                        'id': reg['id'],  # Keep the registration ID!
-                        'donor_id': reg['donor_id'],
-                        'status': reg.get('status', 'Pending'),
-                        'registered_at': reg.get('registered_at'),
-                        'event_id': reg['event_id']
-                    }
-                    
-                    # Get donor details
                     donor_response = supabase.table('donors').select('*').eq('user_id', reg['donor_id']).execute()
                     if donor_response.data:
-                        donor = donor_response.data[0]
-                        # Add donor fields separately, don't overwrite the entire dict
-                        registration_data['donor_name'] = donor.get('donor_name', 'Unknown')
-                        registration_data['email'] = donor.get('email', 'N/A')
-                        registration_data['blood_type'] = donor.get('blood_type')
+                        reg.update(donor_response.data[0])
                     
-                    # Check attendance
                     attendance_response = supabase.table('attendance').select('*').eq('event_id', event_id).eq('donor_id', reg['donor_id']).execute()
                     if attendance_response.data:
-                        registration_data['check_in_time'] = attendance_response.data[0]['check_in_time']
+                        reg['check_in_time'] = attendance_response.data[0]['check_in_time']
                     
-                    registrations.append(registration_data)
+                    registrations.append(reg)
                 
                 event_response = supabase.table('events').select('*').eq('id', event_id).execute()
                 if event_response.data:
@@ -2026,227 +2076,149 @@ def track_attendance():
         print(f"Track attendance error: {e}")
         flash('Error loading attendance data', 'error')
         return render_template('track_attendance.html', attendance_data=[])
-    
-# app.py
-@app.route('/generate_report', methods=['GET', 'POST'])
+
+@app.route('/organizer/reports', methods=['GET', 'POST'])
 @role_required('organizer')
 def generate_report():
     try:
-        # 1. Use organizer_id from session
-        organizer_id = session.get('organizer_id')
-        if not organizer_id:
-            flash("Session expired. Please log in again.", "error")
-            return redirect(url_for('login'))
-
-        # 2. Fetch events safely
-        events_resp = supabase.table('events').select('*').eq('organizer_id', organizer_id).execute()
-        events = events_resp.data or []
-
+        organizer_id = session.get('organizer_id') or session.get('user_id')
+        
+        events_response = supabase.table('events').select('*').eq('organizer_id', organizer_id).execute()
+        events = events_response.data if events_response.data else []
+        
+        reports_response = supabase.table('event_reports').select('*').execute()
+        previous_reports = reports_response.data if reports_response.data else []
+        
+        for report in previous_reports:
+            event_response = supabase.table('events').select('event_name').eq('id', report['event_id']).execute()
+            if event_response.data:
+                report['event_name'] = event_response.data[0]['event_name']
+        
         preview_data = None
-        selected_event_id = None
-
+        
         if request.method == 'POST':
-            selected_event_id = request.form.get('event_id')
+            event_id = request.form.get('event_id')
+            action = request.form.get('action')
             
-            # Find the event in the list we already fetched
-            event = next((e for e in events if str(e['id']) == str(selected_event_id)), None)
-            
-            if event:
-                # 3. Get registrations for this event
-                regs = supabase.table('registrations').select('*').eq('event_id', selected_event_id).execute().data or []
+            if event_id:
+                event_response = supabase.table('events').select('*').eq('id', event_id).execute()
                 
-                total_reg = len(regs)
-                attended_list = [r for r in regs if r.get('status') == 'Attended']
-                attended_count = len(attended_list)
-                
-                # 4. Blood Type Analysis
-                blood_counts = {}
-                if attended_list:
-                    donor_user_ids = [r['donor_id'] for r in attended_list]
-                    # Fetch donor details
-                    donors = supabase.table('donors').select('blood_type').in_('user_id', donor_user_ids).execute().data or []
-                    for d in donors:
-                        bt = d.get('blood_type', 'Unknown')
-                        blood_counts[bt] = blood_counts.get(bt, 0) + 1
-
-                preview_data = {
-                    'event': event,
-                    'total_registrations': total_reg,
-                    'attended': attended_count,
-                    'attendance_rate': round((attended_count / total_reg * 100), 1) if total_reg > 0 else 0,
-                    'blood_type_analysis': blood_counts,
-                    'generated_at': datetime.now().strftime("%B %d, %Y at %I:%M %p")
-                }
-
-        return render_template('generate_report.html', 
-                               events=events, 
-                               preview_data=preview_data, 
-                               selected_event_id=selected_event_id)
+                if event_response.data:
+                    event = event_response.data[0]
+                    
+                    registrations_response = supabase.table('registrations').select('*').eq('event_id', event_id).execute()
+                    registrations = registrations_response.data if registrations_response.data else []
+                    
+                    attendance_response = supabase.table('attendance').select('*', count='exact').eq('event_id', event_id).execute()
+                    attended_count = len(attendance_response.data) if attendance_response.data else 0
+                    
+                    confirmed_count = sum(1 for r in registrations if r.get('status') == 'Confirmed')
+                    
+                    blood_type_distribution = {}
+                    for reg in registrations:
+                        donor_response = supabase.table('donors').select('blood_type').eq('user_id', reg['donor_id']).execute()
+                        if donor_response.data and donor_response.data[0].get('blood_type'):
+                            blood_type = donor_response.data[0]['blood_type']
+                            blood_type_distribution[blood_type] = blood_type_distribution.get(blood_type, 0) + 1
+                    
+                    preview_data = {
+                        'event_name': event['event_name'],
+                        'event_date': event['event_date'],
+                        'event_time': event['event_time'],
+                        'location': event['location'],
+                        'status': event['status'],
+                        'total_registrations': len(registrations),
+                        'confirmed_count': confirmed_count,
+                        'attended_count': attended_count,
+                        'attendance_rate': round((attended_count / len(registrations) * 100), 1) if registrations else 0,
+                        'blood_type_distribution': blood_type_distribution,
+                        'organizer_notes': request.form.get('organizer_notes', '')
+                    }
+                    
+                    if action == 'generate':
+                        report_data = {
+                            'event_id': event_id,
+                            'total_donors': len(registrations),
+                            'blood_units_collected': attended_count,
+                            'organizer_notes': request.form.get('organizer_notes', ''),
+                            'generated_date': datetime.now().isoformat()
+                        }
+                        
+                        supabase.table('event_reports').insert(report_data).execute()
+                        
+                        flash('Report generated successfully!', 'success')
+                        return redirect(url_for('generate_report', event_id=event_id))
+        
+        return render_template('generate_report.html',
+                             events=events,
+                             previous_reports=previous_reports,
+                             preview_data=preview_data,
+                             selected_event_id=request.args.get('event_id'))
     
     except Exception as e:
-        print(f"CRITICAL ERROR: {str(e)}") # This shows up in your terminal
-        flash(f'Error: {str(e)}', 'error')
-        return redirect(url_for('organizer_dashboard'))
+        print(f"Generate report error: {e}")
+        flash('Error generating report', 'error')
+        return render_template('generate_report.html',
+                             events=[],
+                             previous_reports=[],
+                             preview_data=None,
+                             selected_event_id=None)
 
-@app.route('/download_report_csv/<int:event_id>')
+@app.route('/report/<int:report_id>/download')
 @role_required('organizer')
-def download_report_csv(event_id):
-    # This matches the button in your HTML
-    # Add logic here to generate the actual CSV file
-    from io import StringIO
-    import csv
+def download_report(report_id):
+    try:
+        report_response = supabase.table('event_reports').select('*').eq('id', report_id).execute()
+        
+        if not report_response.data:
+            flash('Report not found', 'error')
+            return redirect(url_for('generate_report'))
+        
+        report = report_response.data[0]
+        
+        event_response = supabase.table('events').select('*').eq('id', report['event_id']).execute()
+        
+        if not event_response.data:
+            flash('Event not found', 'error')
+            return redirect(url_for('generate_report'))
+        
+        event = event_response.data[0]
+        
+        output = StringIO()
+        writer = csv.writer(output)
+        
+        writer.writerow(['BloodLink Event Report'])
+        writer.writerow([])
+        writer.writerow(['Event Details'])
+        writer.writerow(['Event Name:', event['event_name']])
+        writer.writerow(['Date:', event['event_date']])
+        writer.writerow(['Location:', event['location']])
+        writer.writerow(['Status:', event['status']])
+        writer.writerow([])
+        writer.writerow(['Report Statistics'])
+        writer.writerow(['Total Donors:', report['total_donors']])
+        writer.writerow(['Blood Units Collected:', report['blood_units_collected']])
+        writer.writerow(['Report Generated:', report['generated_date']])
+        writer.writerow([])
+        
+        if report['organizer_notes']:
+            writer.writerow(['Organizer Notes:'])
+            writer.writerow([report['organizer_notes']])
+        
+        output.seek(0)
+        filename = f"bloodlink_report_{event['event_name'].replace(' ', '_')}_{report['generated_date'][:10]}.csv"
+        
+        return send_file(
+            output,
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=filename
+        )
     
-    # Simple example of CSV generation
-    output = StringIO()
-    writer = csv.writer(output)
-    writer.writerow(['Event Report'])
-    # (Add your logic to fill rows here)
-    
-    output.seek(0)
-    return send_file(StringIO(output.getvalue()), mimetype='text/csv', as_attachment=True, download_name="report.csv")
-
-# @app.route('/organizer/reports', methods=['GET', 'POST'])
-# @role_required('organizer')
-# def generate_report():
-#     try:
-#         organizer_id = session.get('organizer_id') or session.get('user_id')
-        
-#         events_response = supabase.table('events').select('*').eq('organizer_id', organizer_id).execute()
-#         events = events_response.data if events_response.data else []
-        
-#         reports_response = supabase.table('event_reports').select('*').execute()
-#         previous_reports = reports_response.data if reports_response.data else []
-        
-#         for report in previous_reports:
-#             event_response = supabase.table('events').select('event_name').eq('id', report['event_id']).execute()
-#             if event_response.data:
-#                 report['event_name'] = event_response.data[0]['event_name']
-        
-#         preview_data = None
-        
-#         if request.method == 'POST':
-#             event_id = request.form.get('event_id')
-#             action = request.form.get('action')
-            
-#             if event_id:
-#                 event_response = supabase.table('events').select('*').eq('id', event_id).execute()
-                
-#                 if event_response.data:
-#                     event = event_response.data[0]
-                    
-#                     registrations_response = supabase.table('registrations').select('*').eq('event_id', event_id).execute()
-#                     registrations = registrations_response.data if registrations_response.data else []
-                    
-#                     attendance_response = supabase.table('attendance').select('*', count='exact').eq('event_id', event_id).execute()
-#                     attended_count = len(attendance_response.data) if attendance_response.data else 0
-                    
-#                     confirmed_count = sum(1 for r in registrations if r.get('status') == 'Confirmed')
-                    
-#                     blood_type_distribution = {}
-#                     for reg in registrations:
-#                         donor_response = supabase.table('donors').select('blood_type').eq('user_id', reg['donor_id']).execute()
-#                         if donor_response.data and donor_response.data[0].get('blood_type'):
-#                             blood_type = donor_response.data[0]['blood_type']
-#                             blood_type_distribution[blood_type] = blood_type_distribution.get(blood_type, 0) + 1
-                    
-#                     preview_data = {
-#                         'event_name': event['event_name'],
-#                         'event_date': event['event_date'],
-#                         'event_time': event['event_time'],
-#                         'location': event['location'],
-#                         'status': event['status'],
-#                         'total_registrations': len(registrations),
-#                         'confirmed_count': confirmed_count,
-#                         'attended_count': attended_count,
-#                         'attendance_rate': round((attended_count / len(registrations) * 100), 1) if registrations else 0,
-#                         'blood_type_distribution': blood_type_distribution,
-#                         'organizer_notes': request.form.get('organizer_notes', '')
-#                     }
-                    
-#                     if action == 'generate':
-#                         report_data = {
-#                             'event_id': event_id,
-#                             'total_donors': len(registrations),
-#                             'blood_units_collected': attended_count,
-#                             'organizer_notes': request.form.get('organizer_notes', ''),
-#                             'generated_date': datetime.now().isoformat()
-#                         }
-                        
-#                         supabase.table('event_reports').insert(report_data).execute()
-                        
-#                         flash('Report generated successfully!', 'success')
-#                         return redirect(url_for('generate_report', event_id=event_id))
-        
-#         return render_template('generate_report.html',
-#                              events=events,
-#                              previous_reports=previous_reports,
-#                              preview_data=preview_data,
-#                              selected_event_id=request.args.get('event_id'))
-    
-#     except Exception as e:
-#         print(f"Generate report error: {e}")
-#         flash('Error generating report', 'error')
-#         return render_template('generate_report.html',
-#                              events=[],
-#                              previous_reports=[],
-#                              preview_data=None,
-#                              selected_event_id=None)
-
-# @app.route('/report/<int:report_id>/download')
-# @role_required('organizer')
-# def download_report(report_id):
-#     try:
-#         report_response = supabase.table('event_reports').select('*').eq('id', report_id).execute()
-        
-#         if not report_response.data:
-#             flash('Report not found', 'error')
-#             return redirect(url_for('generate_report'))
-        
-#         report = report_response.data[0]
-        
-#         event_response = supabase.table('events').select('*').eq('id', report['event_id']).execute()
-        
-#         if not event_response.data:
-#             flash('Event not found', 'error')
-#             return redirect(url_for('generate_report'))
-        
-#         event = event_response.data[0]
-        
-#         output = StringIO()
-#         writer = csv.writer(output)
-        
-#         writer.writerow(['BloodLink Event Report'])
-#         writer.writerow([])
-#         writer.writerow(['Event Details'])
-#         writer.writerow(['Event Name:', event['event_name']])
-#         writer.writerow(['Date:', event['event_date']])
-#         writer.writerow(['Location:', event['location']])
-#         writer.writerow(['Status:', event['status']])
-#         writer.writerow([])
-#         writer.writerow(['Report Statistics'])
-#         writer.writerow(['Total Donors:', report['total_donors']])
-#         writer.writerow(['Blood Units Collected:', report['blood_units_collected']])
-#         writer.writerow(['Report Generated:', report['generated_date']])
-#         writer.writerow([])
-        
-#         if report['organizer_notes']:
-#             writer.writerow(['Organizer Notes:'])
-#             writer.writerow([report['organizer_notes']])
-        
-#         output.seek(0)
-#         filename = f"bloodlink_report_{event['event_name'].replace(' ', '_')}_{report['generated_date'][:10]}.csv"
-        
-#         return send_file(
-#             output,
-#             mimetype='text/csv',
-#             as_attachment=True,
-#             download_name=filename
-#         )
-    
-#     except Exception as e:
-#         print(f"Download report error: {e}")
-#         flash('Error downloading report', 'error')
-#         return redirect(url_for('generate_report'))
+    except Exception as e:
+        print(f"Download report error: {e}")
+        flash('Error downloading report', 'error')
+        return redirect(url_for('generate_report'))
 
 @app.route('/report/<int:report_id>', methods=['DELETE'])
 @role_required('organizer')
@@ -2264,6 +2236,4 @@ if __name__ == '__main__':
     print("Starting server...")
     print("Open your browser to: http://localhost:5000")
     print("=" * 40)
-
     app.run(debug=True, port=5000)
-
