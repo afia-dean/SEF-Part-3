@@ -1761,33 +1761,60 @@ def mark_notification_read():
 
 @app.route('/donor/notifications/mark-all-read', methods=['POST'])
 @role_required('donor')
-def mark_all_notifications_read_fixed():  # Changed function name to avoid conflict
+def mark_all_notifications_read_fixed():
     try:
         user_id = session.get('user_id')
         if not user_id:
             return jsonify({'success': False, 'error': 'User not authenticated'}), 401
         
-        # Mark only THIS user's unread notifications as read
+        print(f"DEBUG: Attempting to mark all as read for user {user_id}")
+        
+        # First, count how many unread notifications exist
+        unread_count_response = supabase.table('notifications')\
+            .select('id', count='exact')\
+            .eq('user_id', user_id)\
+            .eq('status', False)\
+            .execute()
+        
+        unread_count = unread_count_response.count if hasattr(unread_count_response, 'count') else 0
+        print(f"DEBUG: Found {unread_count} unread notifications for user {user_id}")
+        
+        if unread_count == 0:
+            return jsonify({
+                'success': True, 
+                'message': 'No unread notifications to mark',
+                'count': 0
+            })
+        
+        # Now update them
         response = supabase.table('notifications')\
             .update({
                 'status': True,
-                'read_at': datetime.now().isoformat()
+                # Note: Your table doesn't have a 'read_at' column! Remove this line
+                # 'read_at': datetime.now().isoformat()
             })\
             .eq('user_id', user_id)\
             .eq('status', False)\
             .execute()
         
-        count = len(response.data) if response.data else 0
-        print(f"DEBUG: Marked {count} notifications as read for user {user_id}")
+        print(f"DEBUG: Update response: {response}")
         
-        return jsonify({
-            'success': True, 
-            'message': f'{count} notifications marked as read',
-            'count': count
-        })
+        # Check if update was successful
+        if response.data is not None:
+            # For UPDATE, response.data might be empty list even if successful
+            # So we return the count we got earlier
+            return jsonify({
+                'success': True, 
+                'message': f'{unread_count} notifications marked as read',
+                'count': unread_count
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Update failed'}), 500
         
     except Exception as e:
         print(f"Error marking all notifications: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # ========== ORGANIZER ROUTES ==========
@@ -2284,6 +2311,5 @@ if __name__ == '__main__':
     print("Open your browser to: http://localhost:5000")
     print("=" * 40)
     app.run(debug=True, port=5000)
-
 
 
