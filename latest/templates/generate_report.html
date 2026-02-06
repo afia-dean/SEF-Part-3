@@ -1,164 +1,86 @@
-<!-- templates/generate_report.html -->
 {% extends "base.html" %}
 
-{% block title %}Generate Reports{% endblock %}
-
 {% block content %}
-<div class="dashboard-header">
-    <h1 class="page-title">Generate Event Reports</h1>
-    <p>Create detailed reports for your blood donation events</p>
-</div>
-
-<!-- Report Generation Form -->
-<div class="form-container fade-in">
-    <h3 style="margin-bottom: 1.5rem; color: var(--primary-red);">
-        <i class="fas fa-file-alt"></i> Select Event for Report
-    </h3>
-    
+<div class="form-container">
+    <h2>Generate Event Report</h2>
     <form method="POST" action="{{ url_for('generate_report') }}">
         <div class="form-group">
-            <label for="event_id">Select Event *</label>
-            <select id="event_id" name="event_id" class="form-control" required>
-                <option value="">-- Select an Event --</option>
+            <label>Select Event</label>
+            <select name="event_id" class="form-control" required>
+                <option value="">-- Select Event --</option>
                 {% for event in events %}
-                <option value="{{ event.id }}" {% if selected_event_id == event.id %}selected{% endif %}>
-                    {{ event.event_name }} ({{ event.event_date }} - {{ event.status }})
+                <option value="{{ event.id }}" {% if selected_event_id|string == event.id|string %}selected{% endif %}>
+                    {{ event.event_name }}
                 </option>
                 {% endfor %}
             </select>
         </div>
-        
-        <div class="form-group">
-            <label for="report_type">Report Type</label>
-            <select id="report_type" name="report_type" class="form-control">
-                <option value="summary">Event Summary</option>
-                <option value="detailed">Detailed Report</option>
-                <option value="attendance">Attendance Report</option>
-                <option value="blood_type">Blood Type Analysis</option>
-            </select>
-        </div>
-        
-        <div class="form-group">
-            <label for="organizer_notes">Additional Notes (Optional)</label>
-            <textarea id="organizer_notes" name="organizer_notes" class="form-control" rows="3" 
-                      placeholder="Add any additional comments or observations about this event..."></textarea>
-        </div>
-        
-        <div style="display: flex; gap: 1rem; margin-top: 2rem;">
-            <button type="submit" name="action" value="preview" class="btn btn-secondary" style="flex: 1;">
-                <i class="fas fa-eye"></i> Preview Report
-            </button>
-            <button type="submit" name="action" value="generate" class="btn btn-primary" style="flex: 1;">
-                <i class="fas fa-download"></i> Generate Report
-            </button>
-        </div>
+        <button type="submit" class="btn btn-primary">Generate Preview</button>
     </form>
 </div>
 
-<!-- Previous Reports -->
-{% if previous_reports %}
-<div class="table-container fade-in" style="animation-delay: 0.2s; margin-top: 2rem;">
-    <div class="table-header">
-        <h3><i class="fas fa-history"></i> Previously Generated Reports</h3>
-    </div>
-    
-    <table>
-        <thead>
-            <tr>
-                <th>Report ID</th>
-                <th>Event Name</th>
-                <th>Generated Date</th>
-                <th>Donors Count</th>
-                <th>Blood Units</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for report in previous_reports %}
-            <tr>
-                <td>{{ report.report_id }}</td>
-                <td>{{ report.event_name }}</td>
-                <td>{{ report.generated_date }}</td>
-                <td>{{ report.total_donors or 0 }}</td>
-                <td>{{ report.blood_units_collected or 0 }}</td>
-                <td>
-                    <a href="{{ url_for('download_report', report_id=report.id) }}" class="btn btn-primary btn-sm">
-                        <i class="fas fa-download"></i> Download
-                    </a>
-                    <button onclick="deleteReport('{{ report.id }}')" class="btn btn-danger btn-sm">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-{% endif %}
-
-<!-- Report Preview -->
 {% if preview_data %}
-<div class="fade-in" style="animation-delay: 0.3s; margin-top: 2rem;">
-    <div class="card">
-        <div class="table-header" style="border-radius: 10px 10px 0 0;">
-            <h3><i class="fas fa-chart-bar"></i> Report Preview</h3>
+<style>
+    @media print {
+        .header, .sidebar, .form-container, .btn, .footer, .dashboard-header {
+            display: none !important;
+        }
+        .report-to-print {
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            width: 100% !important;
+        }
+        body { background: white; }
+    }
+</style>
+
+<div class="report-preview-card fade-in report-to-print" style="margin-top: 2rem; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--primary-red); padding-bottom: 10px; margin-bottom: 20px;">
+        <div>
+            <h2 style="color: var(--primary-red); margin: 0;">EVENT SUMMARY REPORT</h2>
+            <p style="color: var(--dark-gray); margin: 5px 0 0 0;">Generated on: {{ preview_data.generated_at }}</p>
         </div>
-        <div style="padding: 2rem;">
-            <h4 style="color: var(--primary-red); margin-bottom: 1rem;">{{ preview_data.event_name }} - Report Summary</h4>
-            
-            <div class="grid" style="margin-bottom: 2rem;">
-                <div class="card">
-                    <h3>Event Details</h3>
-                    <div style="margin-top: 1rem;">
-                        <p><strong>Date:</strong> {{ preview_data.event_date }}</p>
-                        <p><strong>Time:</strong> {{ preview_data.event_time }}</p>
-                        <p><strong>Location:</strong> {{ preview_data.location }}</p>
-                        <p><strong>Status:</strong> {{ preview_data.status }}</p>
-                    </div>
-                </div>
-                
-                <div class="card">
-                    <h3>Attendance Statistics</h3>
-                    <div style="margin-top: 1rem;">
-                        <p><strong>Total Registrations:</strong> {{ preview_data.total_registrations }}</p>
-                        <p><strong>Confirmed Donors:</strong> {{ preview_data.confirmed_count }}</p>
-                        <p><strong>Actual Attendance:</strong> {{ preview_data.attended_count }}</p>
-                        <p><strong>Attendance Rate:</strong> {{ preview_data.attendance_rate }}%</p>
-                    </div>
-                </div>
-            </div>
-            
-            {% if preview_data.blood_type_distribution %}
-            <h4 style="color: var(--primary-red); margin-bottom: 1rem;">Blood Type Distribution</h4>
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Blood Type</th>
-                            <th>Number of Donors</th>
-                            <th>Percentage</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for blood_type, count in preview_data.blood_type_distribution.items() %}
-                        <tr>
-                            <td>{{ blood_type or 'Unknown' }}</td>
-                            <td>{{ count }}</td>
-                            <td>{{ ((count / preview_data.total_registrations) * 100)|round(1) }}%</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% endif %}
-            
-            {% if preview_data.organizer_notes %}
-            <div style="margin-top: 2rem; padding: 1rem; background-color: var(--light-gray); border-radius: 5px;">
-                <h5 style="color: var(--dark-gray); margin-bottom: 0.5rem;">Organizer Notes:</h5>
-                <p>{{ preview_data.organizer_notes }}</p>
-            </div>
-            {% endif %}
+        <button onclick="window.print()" class="btn btn-primary">
+            <i class="fas fa-print"></i> Print / Save as PDF
+        </button>
+    </div>
+
+    <div class="grid">
+        <div class="card">
+            <h4>Event Details</h4>
+            <p><strong>Name:</strong> {{ preview_data.event.event_name }}</p>
+            <p><strong>Date:</strong> {{ preview_data.event.event_date }}</p>
+            <p><strong>Location:</strong> {{ preview_data.event.location }}</p>
         </div>
+        <div class="card">
+            <h4>Attendance Statistics</h4>
+            <p><strong>Total Registrations:</strong> {{ preview_data.total_registrations }}</p>
+            <p><strong>Actual Attendees:</strong> {{ preview_data.attended }}</p>
+            <h3 style="color: var(--success);">Rate: {{ preview_data.attendance_rate }}%</h3>
+        </div>
+    </div>
+
+    <div style="margin-top: 30px;">
+        <h4 style="border-bottom: 1px solid var(--medium-gray); padding-bottom: 10px;">Blood Type Analysis</h4>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+            <thead>
+                <tr style="background: var(--light-gray); text-align: left;">
+                    <th style="padding: 12px; border: 1px solid #ddd;">Blood Type</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">Donor Count</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">Percentage</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for bt, count in preview_data.blood_type_analysis.items() %}
+                <tr>
+                    <td style="padding: 12px; border: 1px solid #ddd;">{{ bt }}</td>
+                    <td style="padding: 12px; border: 1px solid #ddd;">{{ count }}</td>
+                    <td style="padding: 12px; border: 1px solid #ddd;">{{ ((count / preview_data.attended) * 100) | round(1) if preview_data.attended > 0 else 0 }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 </div>
 {% endif %}
