@@ -1411,14 +1411,33 @@ def donor_dashboard():
         if donor.get('last_donation_date'):
             last_donation = {'donation_date': donor['last_donation_date']}
         
-        # Get unread notifications count
+        # Get unread notifications count for THIS donor only
         unread_notifications = 0
         try:
-            unread_response = supabase.table('notifications').select('*', count='exact').eq('status', False).execute()
-            if unread_response.data:
+            # Get current donor's user_id from session
+            donor_user_id = session['user_id']
+            
+            # Use the helper function OR direct query
+            # Option 1: Using your helper function if it exists
+            # unread_notifications = get_unread_notification_count(donor_user_id)
+            
+            # Option 2: Direct query with proper filtering
+            unread_response = supabase.table('notifications')\
+                .select('*', count='exact')\
+                .eq('user_id', donor_user_id)\
+                .eq('status', False)\
+                .execute()
+            
+            # Get count properly
+            if hasattr(unread_response, 'count'):
+                unread_notifications = unread_response.count
+            elif unread_response.data:
                 unread_notifications = len(unread_response.data)
+            
+            print(f"DEBUG: Donor {donor_user_id} has {unread_notifications} unread notifications")
+                
         except Exception as e:
-            print(f"Note: Could not fetch notifications: {e}")
+            print(f"Error fetching notifications for donor: {e}")
             unread_notifications = 0
         
         return render_template('donor.html',
