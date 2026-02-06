@@ -103,6 +103,99 @@ def summary_counts():
         "fulfilled_requests": fulfilled_requests,
     }
 
+# -------------------------
+# Notification Functions
+# -------------------------
+def create_notification(user_id, title, message, notification_type="info", related_id=None):
+    """Create a new notification for a user"""
+    import uuid
+    
+    # Make sure user_id is a string
+    user_id = str(user_id) if user_id else None
+    
+    if not user_id:
+        print("DEBUG: Cannot create notification - user_id is None or empty")
+        return None
+    
+    notification_id = str(uuid.uuid4())
+    
+    # Build notification data matching your table schema
+    notification_data = {
+        'id': notification_id,
+        'user_id': user_id,
+        'title': title[:100] if title else 'Notification',  # Limit title length
+        'message': message[:500] if message else '',  # Limit message length
+        'status': False,  # Unread
+    }
+    
+    # Add optional fields only if they exist in the table
+    # First check what columns exist in the table
+    try:
+        # Add created_at if column exists
+        notification_data['created_at'] = now_iso()
+    except:
+        pass  # Column might not exist
+    
+    # Add notification_type if provided and column exists
+    if notification_type:
+        notification_data['notification_type'] = notification_type
+    
+    # Add related_id if provided and column exists
+    if related_id:
+        notification_data['related_id'] = str(related_id)
+    
+    print(f"DEBUG: Creating notification with data: {notification_data}")
+    
+    try:
+        # Try to insert the notification
+        result = supabase.table('notifications').insert(notification_data).execute()
+        print(f"DEBUG: Supabase insert result: {result}")
+        
+        if result.data:
+            print(f"DEBUG: SUCCESS - Created notification with ID: {notification_id}")
+            return result.data[0]
+        else:
+            print(f"DEBUG: FAILED - No data returned from Supabase insert")
+            # Try a simpler insert without optional columns
+            return create_simple_notification(user_id, title, message)
+            
+    except Exception as e:
+        print(f"ERROR creating notification: {e}")
+        # Fall back to simple notification
+        return create_simple_notification(user_id, title, message)
+
+def create_simple_notification(user_id, title, message):
+    """Fallback: Create a simple notification with only required fields"""
+    import uuid
+    
+    notification_id = str(uuid.uuid4())
+    simple_data = {
+        'id': notification_id,
+        'user_id': str(user_id),
+        'message': f"{title}: {message}"[:500]
+    }
+    
+    print(f"DEBUG: Trying simple notification: {simple_data}")
+    
+    try:
+        result = supabase.table('notifications').insert(simple_data).execute()
+        if result.data:
+            print(f"DEBUG: SUCCESS - Created simple notification")
+            return result.data[0]
+    except Exception as e:
+        print(f"ERROR creating simple notification: {e}")
+    
+    return None
+
+def get_unread_notification_count(user_id):
+    """Get count of unread notifications for a user"""
+    try:
+        response = supabase.table('notifications').select('id', count='exact').eq('user_id', user_id).eq('status', False).execute()
+        return response.count if hasattr(response, 'count') else len(response.data) if response.data else 0
+    except Exception as e:
+        print(f"Error getting unread count: {e}")
+        return 0
+
 def add_inventory_log(inventory_id, action, old_q, new_q, changed_by="Admin"):
     supabase.table("inventory_logs").insert({
         "inventory_id": inventory_id,
@@ -814,11 +907,13 @@ def create_request():
             units_needed = int(request.form.get('units_needed', 0))
             urgency_level = request.form.get('urgency_level')
             notes = request.form.get('notes', '')
+            patient_info = request.form.get('patient_info', '')
             
             if not all([blood_type, units_needed, urgency_level]):
                 flash('Please fill in all required fields', 'error')
                 return redirect(url_for('create_request'))
             
+            # Create the urgent request
             response = supabase.table('urgent_request').insert({
                 'blood_type': blood_type,
                 'units_needed': units_needed,
@@ -830,13 +925,79 @@ def create_request():
                 'requested_at': datetime.now().isoformat()
             }).execute()
             
-            flash('Urgent blood request created successfully!', 'success')
-            return redirect(url_for('view_requests'))
+            if response.data:
+                request_id = response.data[0]['id']
+                print(f"DEBUG: Created urgent request ID: {request_id}")
+                
+                # ========== NOTIFY MATCHING DONORS ==========
+                try:
+                    # Get all eligible donors with matching blood type
+                    donors_response = supabase.table('donors')\
+                        .select('user_id, donor_name, blood_type, eligibility_status')\
+                        .eq('blood_type', blood_type)\
+                        .eq('eligibility_status', True)\
+                        .execute()
+                    
+                    donors_notified = 0
+                    
+                    if donors_response.data:
+                        for donor in donors_response.data:
+                            donor_user_id = donor.get('user_id')
+                            donor_name = donor.get('donor_name', 'Donor')
+                            
+                            if donor_user_id:
+                                # Create notification for each matching donor
+                                notification_message = f"URGENT: {hospital_name} needs {units_needed} units of {blood_type} blood."
+                                
+                                if urgency_level == 'High':
+                                    notification_message += " This is a CRITICAL emergency!"
+                                elif urgency_level == 'Medium':
+                                    notification_message += " Required for scheduled procedure."
+                                
+                                if patient_info:
+                                    notification_message += f" For: {patient_info}"
+                                
+                                if notes:
+                                    notification_message += f" Notes: {notes}"
+                                
+                                # Use the create_notification helper function
+                                notification = create_notification(
+                                    user_id=donor_user_id,
+                                    title=f"Urgent Blood Request ({blood_type})",
+                                    message=notification_message,
+                                    notification_type="alert",  # Use "alert" for urgent notifications
+                                    related_id=str(request_id)  # Link to the request
+                                )
+                                
+                                if notification:
+                                    donors_notified += 1
+                                    print(f"DEBUG: Notified donor {donor_name} ({donor_user_id})")
+                    
+                    print(f"DEBUG: Successfully notified {donors_notified} donors for blood type {blood_type}")
+                    
+                    # Add success message with notification count
+                    if donors_notified > 0:
+                        flash(f'Urgent blood request created successfully! Notified {donors_notified} matching donors.', 'success')
+                    else:
+                        flash('Urgent blood request created successfully! No eligible donors with matching blood type found.', 'info')
+                    
+                except Exception as notify_error:
+                    print(f"DEBUG: Error notifying donors: {notify_error}")
+                    # Still show success for request creation
+                    flash('Urgent blood request created successfully! (Error notifying some donors)', 'warning')
+                
+                return redirect(url_for('view_requests'))
+            else:
+                flash('Error creating urgent request', 'error')
+                return redirect(url_for('create_request'))
             
         except Exception as e:
+            print(f"Error creating urgent request: {e}")
+            import traceback
+            traceback.print_exc()
             flash('Error creating urgent request', 'error')
             return redirect(url_for('create_request'))
-
+        
 @app.route('/staff/donors/toggle-eligibility', methods=['POST'])
 @role_required('staff')
 def toggle_donor_eligibility():
@@ -933,30 +1094,6 @@ def cancel_request(request_id):
             return jsonify({'success': False, 'error': 'Request not found'}), 404
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/staff/requests/<int:request_id>/notify', methods=['POST'])
-@role_required('staff')
-def notify_donors(request_id):
-    try:
-        request_response = supabase.table('urgent_request').select('*').eq('id', request_id).execute()
-        if not request_response.data:
-            return jsonify({'success': False, 'error': 'Request not found'}), 404
-        
-        request_data = request_response.data[0]
-        blood_type = request_data['blood_type']
-        
-        donors_response = supabase.table('donors').select('*').eq('blood_type', blood_type).eq('eligibility_status', True).execute()
-        
-        print(f"Would notify {len(donors_response.data)} donors for blood type {blood_type}")
-        
-        return jsonify({
-            'success': True, 
-            'message': f'Notification sent to {len(donors_response.data)} matching donors',
-            'donors_notified': len(donors_response.data)
-        })
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
     
 @app.route('/staff/requests/<request_id>', methods=['GET'])
 @role_required('staff')
@@ -987,6 +1124,155 @@ def get_request_details(request_id):
         else:
             return jsonify({'success': False, 'error': 'Request not found'}), 404
     except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    
+@app.route('/staff/requests/<int:request_id>/notify', methods=['POST'])
+@role_required('staff')
+def notify_donors(request_id):
+    """Manually trigger notifications for a specific request"""
+    print(f"DEBUG: notify_donors called for request_id: {request_id}")
+    
+    try:
+        # Get the urgent request details
+        request_response = supabase.table('urgent_request').select('*').eq('id', request_id).execute()
+        
+        print(f"DEBUG: Request query result: {request_response}")
+        
+        if not request_response.data:
+            print(f"DEBUG: No request found with ID {request_id}")
+            return jsonify({'success': False, 'error': 'Request not found'}), 404
+        
+        request_data = request_response.data[0]
+        blood_type = request_data['blood_type']
+        units_needed = request_data.get('units_needed', 0)
+        hospital_name = request_data.get('hospital_name', 'Hospital')
+        urgency_level = request_data.get('urgency_level', 'Medium')
+        notes = request_data.get('notes', '')
+        
+        print(f"DEBUG: Found request - Blood type: {blood_type}, Units: {units_needed}, Hospital: {hospital_name}")
+        
+        # FIRST: Check what donors exist with ANY blood type
+        all_donors_test = supabase.table('donors').select('id, donor_name, blood_type, eligibility_status, user_id').limit(5).execute()
+        print(f"DEBUG: Sample donors in database: {all_donors_test.data}")
+        
+        # SECOND: Try different ways to query for the blood type
+        print(f"DEBUG: Attempting to find donors with blood type: '{blood_type}'")
+        
+        # Try exact match first
+        donors_response = supabase.table('donors')\
+            .select('id, user_id, donor_name, blood_type, eligibility_status, email')\
+            .eq('blood_type', blood_type)\
+            .eq('eligibility_status', True)\
+            .execute()
+        
+        print(f"DEBUG: Exact match query result: Found {len(donors_response.data) if donors_response.data else 0} donors")
+        
+        # If no exact matches, try case-insensitive
+        if not donors_response.data or len(donors_response.data) == 0:
+            print(f"DEBUG: Trying case-insensitive search for '{blood_type}'")
+            
+            # Get all donors and filter manually
+            all_donors = supabase.table('donors').select('id, user_id, donor_name, blood_type, eligibility_status, email').execute()
+            
+            if all_donors.data:
+                matching_donors = []
+                for donor in all_donors.data:
+                    donor_blood_type = donor.get('blood_type', '').strip().upper()
+                    search_blood_type = blood_type.strip().upper()
+                    
+                    # Check for different blood type formats
+                    is_match = (
+                        donor_blood_type == search_blood_type or
+                        donor_blood_type.replace('+', ' POSITIVE') == search_blood_type.replace('+', ' POSITIVE') or
+                        donor_blood_type.replace('-', ' NEGATIVE') == search_blood_type.replace('-', ' NEGATIVE')
+                    )
+                    
+                    if is_match and donor.get('eligibility_status') == True:
+                        matching_donors.append(donor)
+                
+                print(f"DEBUG: Manual filtering found {len(matching_donors)} matching donors")
+                donors_response.data = matching_donors
+        
+        donors_notified = 0
+        donor_details = []
+        
+        if donors_response.data and len(donors_response.data) > 0:
+            print(f"DEBUG: Processing {len(donors_response.data)} eligible donors")
+            
+            for donor in donors_response.data:
+                donor_user_id = donor.get('user_id')
+                donor_name = donor.get('donor_name', 'Donor')
+                donor_blood_type = donor.get('blood_type', 'Unknown')
+                
+                print(f"DEBUG: Processing donor: {donor_name}, Blood type: {donor_blood_type}, User ID: {donor_user_id}, Eligible: {donor.get('eligibility_status')}")
+                
+                if donor_user_id:
+                    # Create the notification message
+                    notification_message = f"URGENT BLOOD REQUEST: {hospital_name} needs {units_needed} units of {blood_type} blood"
+                    
+                    if urgency_level == 'High':
+                        notification_message += " - CRITICAL EMERGENCY!"
+                    elif urgency_level == 'Medium':
+                        notification_message += " - Urgent need for scheduled procedure"
+                    else:
+                        notification_message += " - Please consider donating if available"
+                    
+                    if notes:
+                        notification_message += f"\n\nNotes: {notes}"
+                    
+                    print(f"DEBUG: Creating notification for donor {donor_name} (User ID: {donor_user_id})")
+                    
+                    # Create notification in database
+                    notification = create_notification(
+                        user_id=donor_user_id,
+                        title=f"⚠️ Urgent: {blood_type} Blood Needed",
+                        message=notification_message,
+                        notification_type="alert",
+                        related_id=str(request_id)
+                    )
+                    
+                    if notification:
+                        donors_notified += 1
+                        donor_details.append({
+                            'name': donor_name,
+                            'user_id': donor_user_id,
+                            'email': donor.get('email', 'No email'),
+                            'blood_type': donor_blood_type
+                        })
+                        print(f"DEBUG: SUCCESS - Created notification for donor: {donor_name}")
+                    else:
+                        print(f"DEBUG: FAILED - Could not create notification for donor: {donor_name}")
+                else:
+                    print(f"DEBUG: Skipping donor {donor_name} - missing user_id")
+        else:
+            print(f"DEBUG: No eligible donors found for blood type {blood_type}")
+            
+            # Check what blood types actually exist in the database
+            all_blood_types = supabase.table('donors').select('blood_type').execute()
+            if all_blood_types.data:
+                unique_blood_types = set([d.get('blood_type') for d in all_blood_types.data if d.get('blood_type')])
+                print(f"DEBUG: Blood types in database: {sorted(unique_blood_types)}")
+        
+        result = {
+            'success': True if donors_notified > 0 else False, 
+            'message': f'Notifications sent to {donors_notified} donors with {blood_type} blood type' if donors_notified > 0 else f'No eligible donors found with {blood_type} blood type',
+            'donors_notified': donors_notified,
+            'donor_details': donor_details,
+            'blood_type': blood_type,
+            'debug': {
+                'request_blood_type': blood_type,
+                'total_donors_checked': len(donors_response.data) if donors_response.data else 0
+            }
+        }
+        
+        print(f"DEBUG: Returning result: {result}")
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"ERROR in notify_donors: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # ========== DONOR ROUTES ==========
