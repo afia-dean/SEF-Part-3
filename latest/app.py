@@ -918,6 +918,7 @@ def view_requests():
         flash('Error loading urgent requests', 'error')
         return render_template('view_requests.html', requests=[])
 
+# ========== CREATE URGENT BLOOD REQUEST ==========
 @app.route('/staff/requests/create', methods=['GET', 'POST'])
 @role_required('staff')
 def create_request():
@@ -1040,6 +1041,48 @@ def create_request():
             traceback.print_exc()
             flash('Error creating urgent request', 'error')
             return redirect(url_for('create_request'))
+        
+#==== API endpoint for donor count =====
+@app.route('/api/donors/count/<blood_type>')
+@role_required('staff')
+def get_donor_count_by_blood_type(blood_type):
+    """Get count of eligible donors by blood type (simplified)"""
+    try:
+        print(f"DEBUG: Counting donors with blood type: {blood_type}")
+        
+        # Try different query approaches
+        response = supabase.table('donors')\
+            .select('id')\
+            .eq('blood_type', blood_type)\
+            .eq('eligibility_status', True)\
+            .execute()
+        
+        print(f"DEBUG: Response: {response}")
+        
+        count = 0
+        if hasattr(response, 'data') and response.data:
+            count = len(response.data)
+        elif hasattr(response, 'count'):
+            count = response.count
+            
+        print(f"DEBUG: Count = {count}")
+        
+        return jsonify({
+            'success': True,
+            'count': count,
+            'blood_type': blood_type
+        })
+        
+    except Exception as e:
+        print(f"ERROR in get_donor_count_by_blood_type: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'count': 0
+        }), 500
         
 @app.route('/staff/donors/toggle-eligibility', methods=['POST'])
 @role_required('staff')
@@ -2241,5 +2284,6 @@ if __name__ == '__main__':
     print("Open your browser to: http://localhost:5000")
     print("=" * 40)
     app.run(debug=True, port=5000)
+
 
 
