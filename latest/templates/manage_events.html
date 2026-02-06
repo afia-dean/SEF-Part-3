@@ -131,9 +131,9 @@
                 <label for="status">Status</label>
                 <select id="status" name="status" class="form-control">
                     <option value="Upcoming">Upcoming</option>
-                    <option value="Ongoing">Ongoing</option>
-                    <option value="Completed">Completed</option>
-                    <option value="Cancelled">Cancelled</option>
+                    <option value="Ongoing" class="hidden-status">Ongoing</option>
+                    <option value="Completed" class="hidden-status">Completed</option>
+                    <option value="Cancelled" class="hidden-status">Cancelled</option>
                 </select>
             </div>
             
@@ -156,6 +156,17 @@ function openCreateEventModal() {
     document.getElementById('modalTitle').textContent = 'Create New Event';
     document.getElementById('eventForm').reset();
     document.getElementById('eventId').value = '';
+    
+    // Hide "Completed" and "Cancelled" options for new events
+    const statusSelect = document.getElementById('status');
+    const hiddenOptions = statusSelect.querySelectorAll('.hidden-status');
+    hiddenOptions.forEach(option => {
+        option.style.display = 'none';
+    });
+    
+    // Set default status to "Upcoming"
+    statusSelect.value = 'Upcoming';
+    
     document.getElementById('eventModal').style.display = 'flex';
 }
 
@@ -164,6 +175,17 @@ function editEvent(eventId) {
     // For now, we'll show a simple form
     document.getElementById('modalTitle').textContent = 'Edit Event';
     document.getElementById('eventId').value = eventId;
+    
+    // Show ALL status options when editing
+    const statusSelect = document.getElementById('status');
+    const hiddenOptions = statusSelect.querySelectorAll('.hidden-status');
+    hiddenOptions.forEach(option => {
+        option.style.display = 'block'; // or 'inline-block'
+    });
+    
+    // Note: In a real implementation, you would fetch the event's current status
+    // and set it as the selected value here
+    
     document.getElementById('eventModal').style.display = 'flex';
 }
 
