@@ -2019,10 +2019,11 @@ def update_event_status(event_id):
 @app.route('/organizer/registrations')
 @role_required('organizer')
 def view_registrations():
+    """View all registrations for organizer's events"""
     try:
         organizer_id = session.get('organizer_id') or session.get('user_id')
-        event_id = request.args.get('event_id')
         
+        # Get all events created by this organizer
         events_response = supabase.table('events').select('*').eq('organizer_id', organizer_id).execute()
         all_events = events_response.data if events_response.data else []
         
@@ -2030,40 +2031,75 @@ def view_registrations():
         selected_event = None
         statistics = {}
         
+        event_id = request.args.get('event_id')
+        
         if event_id:
+            # Get all registrations for this event
             registrations_response = supabase.table('registrations').select('*').eq('event_id', event_id).execute()
             
             if registrations_response.data:
                 for reg in registrations_response.data:
+                    # Store the actual registration ID
+                    registration_data = {
+                        'registration_id': reg['id'],  # This is the integer registration ID
+                        'donor_id': reg['donor_id'],   # This is the UUID donor ID
+                        'status': reg['status'],
+                        'registered_at': reg['registered_at']
+                    }
+                    
+                    # Get donor details
                     donor_response = supabase.table('donors').select('*').eq('user_id', reg['donor_id']).execute()
                     if donor_response.data:
-                        reg.update(donor_response.data[0])
+                        registration_data.update(donor_response.data[0])
                     
-                    attendance_response = supabase.table('attendance').select('*').eq('event_id', event_id).eq('donor_id', reg['donor_id']).execute()
+                    # Get user email
+                    user_response = supabase.table('users').select('email').eq('id', reg['donor_id']).execute()
+                    if user_response.data:
+                        registration_data['email'] = user_response.data[0]['email']
+                    
+                    # Get attendance record
+                    attendance_response = supabase.table('attendance').select('*')\
+                        .eq('event_id', event_id)\
+                        .eq('donor_id', reg['donor_id'])\
+                        .execute()
+                    
                     if attendance_response.data:
-                        reg['check_in_time'] = attendance_response.data[0]['check_in_time']
+                        registration_data['attendance_id'] = attendance_response.data[0]['attendance_id']
+                        registration_data['check_in_time'] = attendance_response.data[0]['check_in_time']
+                    else:
+                        registration_data['attendance_id'] = None
+                        registration_data['check_in_time'] = None
                     
-                    registrations.append(reg)
+                    registrations.append(registration_data)
                 
+                # Get event details
                 event_response = supabase.table('events').select('*').eq('id', event_id).execute()
                 if event_response.data:
                     selected_event = event_response.data[0]
                 
+                # Calculate statistics
                 total_registrations_count = len(registrations_response.data)
                 confirmed_count = sum(1 for r in registrations_response.data if r.get('status') == 'Confirmed')
-                attended_count = len([r for r in registrations if r.get('check_in_time')])
-                attendance_rate = (attended_count / total_registrations_count * 100) if total_registrations_count > 0 else 0
+                attended_count = sum(1 for r in registrations_response.data if r.get('status') == 'Attended')
+                no_show_count = sum(1 for r in registrations_response.data if r.get('status') == 'No-show')
                 
+                # Calculate attendance rate based on confirmed registrations
+                attendance_rate = (attended_count / confirmed_count * 100) if confirmed_count > 0 else 0
+                
+                # Calculate blood type distribution
                 blood_type_distribution = {}
                 for reg in registrations:
                     blood_type = reg.get('blood_type')
                     if blood_type:
                         blood_type_distribution[blood_type] = blood_type_distribution.get(blood_type, 0) + 1
+                    else:
+                        blood_type_distribution['Unknown'] = blood_type_distribution.get('Unknown', 0) + 1
                 
                 statistics = {
                     'total_registrations_count': total_registrations_count,
                     'confirmed_count': confirmed_count,
                     'attended_count': attended_count,
+                    'no_show_count': no_show_count,
                     'attendance_rate': round(attendance_rate, 1),
                     'blood_type_distribution': blood_type_distribution
                 }
@@ -2077,6 +2113,8 @@ def view_registrations():
     
     except Exception as e:
         print(f"View registrations error: {e}")
+        import traceback
+        traceback.print_exc()
         flash('Error loading registrations', 'error')
         return render_template('view_registrations.html',
                              registrations=[],
@@ -2086,55 +2124,168 @@ def view_registrations():
                              total_registrations_count=0,
                              confirmed_count=0,
                              attended_count=0,
+                             no_show_count=0,
                              attendance_rate=0,
                              blood_type_distribution={})
 
-@app.route('/registration/<int:registration_id>/status', methods=['POST'])
+@app.route('/registration/<registration_id>/status', methods=['POST'])
 @role_required('organizer')
 def update_registration_status(registration_id):
+    """Unified route for updating registration status - handles all status changes"""
     try:
         data = request.get_json()
         new_status = data.get('status')
         
-        if new_status not in ['Pending', 'Confirmed', 'Attended', 'No-show']:
-            return jsonify({'success': False, 'message': 'Invalid status'})
+        if not new_status or new_status not in ['Pending', 'Confirmed', 'Attended', 'No-show']:
+            return jsonify({'success': False, 'message': 'Invalid status'}), 400
         
-        supabase.table('registrations').update({'status': new_status}).eq('id', registration_id).execute()
+        # Try to convert registration_id to integer first (for registration IDs)
+        try:
+            # Try integer first (for registration IDs)
+            reg_id_int = int(registration_id)
+            id_field = 'id'
+            id_value = reg_id_int
+        except ValueError:
+            # If it's not an integer, it might be a UUID (donor ID)
+            # We need to find the registration ID using donor_id and event_id
+            event_id = data.get('event_id')
+            if not event_id:
+                return jsonify({'success': False, 'message': 'Event ID required when using donor ID'}), 400
+            
+            # Find registration by donor_id and event_id
+            reg_response = supabase.table('registrations')\
+                .select('id')\
+                .eq('donor_id', registration_id)\
+                .eq('event_id', event_id)\
+                .execute()
+            
+            if not reg_response.data:
+                return jsonify({'success': False, 'message': 'Registration not found'}), 404
+            
+            id_field = 'id'
+            id_value = reg_response.data[0]['id']
+            registration_id = str(id_value)  # Update for logging
         
-        return jsonify({'success': True, 'message': 'Registration status updated'})
+        # Get the current registration
+        registration_response = supabase.table('registrations')\
+            .select('*')\
+            .eq(id_field, id_value)\
+            .execute()
+        
+        if not registration_response.data:
+            return jsonify({'success': False, 'message': 'Registration not found'}), 404
+        
+        registration = registration_response.data[0]
+        event_id = registration['event_id']
+        donor_id = registration['donor_id']
+        
+        print(f"DEBUG: Updating registration {id_value} to status {new_status}")
+        
+        # Handle status-specific logic
+        if new_status == 'Attended':
+            # Check if attendance already exists
+            attendance_response = supabase.table('attendance').select('*')\
+                .eq('event_id', event_id)\
+                .eq('donor_id', donor_id)\
+                .execute()
+            
+            if not attendance_response.data:
+                # Create attendance record
+                attendance_data = {
+                    'event_id': event_id,
+                    'donor_id': donor_id,
+                    'check_in_time': datetime.now().isoformat()
+                }
+                supabase.table('attendance').insert(attendance_data).execute()
+                print(f"DEBUG: Created attendance record for registration {id_value}")
+        
+        elif new_status == 'No-show':
+            # Delete attendance record if exists
+            supabase.table('attendance').delete()\
+                .eq('event_id', event_id)\
+                .eq('donor_id', donor_id)\
+                .execute()
+            print(f"DEBUG: Removed attendance record for registration {id_value}")
+        
+        # Update registration status
+        result = supabase.table('registrations')\
+            .update({'status': new_status})\
+            .eq(id_field, id_value)\
+            .execute()
+        
+        if result.data:
+            return jsonify({'success': True, 'message': 'Registration status updated successfully'})
+        else:
+            return jsonify({'success': False, 'message': 'Failed to update registration status'}), 500
     
     except Exception as e:
         print(f"Update registration status error: {e}")
-        return jsonify({'success': False, 'message': 'Error updating registration status'})
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Error updating registration status: {str(e)}'}), 500
 
 @app.route('/registration/<int:registration_id>/attendance', methods=['POST'])
 @role_required('organizer')
 def mark_attendance(registration_id):
     try:
+        # Get registration details
         registration_response = supabase.table('registrations').select('*').eq('id', registration_id).execute()
         
         if not registration_response.data:
             return jsonify({'success': False, 'message': 'Registration not found'})
         
         registration = registration_response.data[0]
+        event_id = registration['event_id']
+        donor_id = registration['donor_id']
         
-        attendance_response = supabase.table('attendance').select('*').eq('event_id', registration['event_id']).eq('donor_id', registration['donor_id']).execute()
+        # Check if attendance already exists
+        attendance_response = supabase.table('attendance').select('*')\
+            .eq('event_id', event_id)\
+            .eq('donor_id', donor_id)\
+            .execute()
         
-        if not attendance_response.data:
-            supabase.table('attendance').insert({
-                'event_id': registration['event_id'],
-                'donor_id': registration['donor_id'],
-                'check_in_time': datetime.now().isoformat()
-            }).execute()
-            
-            supabase.table('registrations').update({'status': 'Attended'}).eq('id', registration_id).execute()
+        if attendance_response.data:
+            return jsonify({'success': False, 'message': 'Attendance already marked'})
         
-        return jsonify({'success': True, 'message': 'Attendance marked successfully'})
+        # Create attendance record
+        attendance_data = {
+            'event_id': event_id,
+            'donor_id': donor_id,
+            'check_in_time': datetime.now().isoformat()
+        }
+        
+        attendance_result = supabase.table('attendance').insert(attendance_data).execute()
+        
+        # Update registration status to 'Attended'
+        supabase.table('registrations')\
+            .update({'status': 'Attended'})\
+            .eq('id', registration_id)\
+            .execute()
+        
+        return jsonify({
+            'success': True, 
+            'message': 'Attendance marked successfully',
+            'attendance_id': attendance_result.data[0]['attendance_id'] if attendance_result.data else None,
+            'check_in_time': attendance_data['check_in_time']
+        })
     
     except Exception as e:
         print(f"Mark attendance error: {e}")
         return jsonify({'success': False, 'message': 'Error marking attendance'})
-
+    
+@app.template_filter('format_time')
+def format_time_filter(value):
+    if not value:
+        return ''
+    try:
+        if isinstance(value, str):
+            date_obj = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        else:
+            date_obj = value
+        return date_obj.strftime('%I:%M %p')
+    except:
+        return str(value)
+    
 @app.route('/organizer/track-attendance')
 @role_required('organizer')
 def track_attendance():
@@ -2188,12 +2339,15 @@ def generate_report():
                 report['event_name'] = event_response.data[0]['event_name']
         
         preview_data = None
+        selected_event_id = None
         
         if request.method == 'POST':
             event_id = request.form.get('event_id')
             action = request.form.get('action')
             
             if event_id:
+                selected_event_id = event_id
+                
                 event_response = supabase.table('events').select('*').eq('id', event_id).execute()
                 
                 if event_response.data:
@@ -2214,17 +2368,15 @@ def generate_report():
                             blood_type = donor_response.data[0]['blood_type']
                             blood_type_distribution[blood_type] = blood_type_distribution.get(blood_type, 0) + 1
                     
+                    # FIX: Create preview_data with the structure expected by the template
                     preview_data = {
-                        'event_name': event['event_name'],
-                        'event_date': event['event_date'],
-                        'event_time': event['event_time'],
-                        'location': event['location'],
-                        'status': event['status'],
+                        'event': event,  # Nested event object
+                        'generated_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         'total_registrations': len(registrations),
+                        'attended': attended_count,
                         'confirmed_count': confirmed_count,
-                        'attended_count': attended_count,
                         'attendance_rate': round((attended_count / len(registrations) * 100), 1) if registrations else 0,
-                        'blood_type_distribution': blood_type_distribution,
+                        'blood_type_analysis': blood_type_distribution,  # Changed key name to match template
                         'organizer_notes': request.form.get('organizer_notes', '')
                     }
                     
@@ -2240,13 +2392,13 @@ def generate_report():
                         supabase.table('event_reports').insert(report_data).execute()
                         
                         flash('Report generated successfully!', 'success')
-                        return redirect(url_for('generate_report', event_id=event_id))
+                        return redirect(url_for('generate_report'))
         
         return render_template('generate_report.html',
                              events=events,
                              previous_reports=previous_reports,
                              preview_data=preview_data,
-                             selected_event_id=request.args.get('event_id'))
+                             selected_event_id=selected_event_id or request.args.get('event_id'))
     
     except Exception as e:
         print(f"Generate report error: {e}")

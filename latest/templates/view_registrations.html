@@ -1,5 +1,5 @@
 <!-- Event Organizer Role -->
-<!-- view_registrations.html to view all donor registrations for events organized by the organizer -->
+<!-- view_registrations.html -->
 {% extends "base.html" %}
 
 {% block title %}Event Registrations{% endblock %}
@@ -8,9 +8,10 @@
 <div class="dashboard-header">
     <h1 class="page-title">Event Registrations</h1>
     <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
-        <div>
-            <select id="eventFilter" class="form-control" style="width: auto;" onchange="filterByEvent()">
-                <option value="all">All Events</option>
+        <div style="flex: 1; margin-right: 20px;">
+            <label for="eventFilter" style="margin-right: 10px; font-weight: 500;">Select Event:</label>
+            <select id="eventFilter" class="form-control" style="width: 100%; max-width: 300px;" onchange="filterByEvent()">
+                <option value="">-- Select an Event --</option>
                 {% for event in all_events %}
                 <option value="{{ event.id }}" {% if selected_event_id == event.id %}selected{% endif %}>
                     {{ event.event_name }} ({{ event.event_date }})
@@ -19,7 +20,8 @@
             </select>
         </div>
         <div>
-            <select id="statusFilter" class="form-control" style="width: auto; margin-left: 10px;" onchange="filterRegistrations()">
+            <label for="statusFilter" style="margin-right: 10px; font-weight: 500;">Filter Status:</label>
+            <select id="statusFilter" class="form-control" style="width: auto;" onchange="filterRegistrations()">
                 <option value="all">All Status</option>
                 <option value="Pending">Pending</option>
                 <option value="Confirmed">Confirmed</option>
@@ -40,85 +42,100 @@
     </div>
     
     {% if registrations %}
-    <table id="registrationsTable">
-        <thead>
-            <tr>
-                <th>Donor Name</th>
-                <th>Email</th>
-                <th>Blood Type</th>
-                <th>Registration Date</th>
-                <th>Status</th>
-                <th>Attendance</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for reg in registrations %}
-            <tr data-status="{{ reg.status }}">
-                <td>{{ reg.donor_name or 'N/A' }}</td>
-                <td>{{ reg.email or 'N/A' }}</td>
-                <td>
-                    {% if reg.blood_type %}
-                    <span style="background-color: #ffebee; color: #d32f2f; padding: 0.25rem 0.5rem; border-radius: 4px;">
-                        {{ reg.blood_type }}
-                    </span>
-                    {% else %}
-                    N/A
-                    {% endif %}
-                </td>
-                <td>{{ reg.registered_at }}</td>
-                <td>
-                    {% if reg.status == 'Pending' %}
-                    <span class="status-badge status-upcoming">{{ reg.status }}</span>
-                    {% elif reg.status == 'Confirmed' %}
-                    <span class="status-badge status-ongoing">{{ reg.status }}</span>
-                    {% elif reg.status == 'Attended' %}
-                    <span class="status-badge status-completed">{{ reg.status }}</span>
-                    {% else %}
-                    <span class="status-badge status-cancelled">{{ reg.status }}</span>
-                    {% endif %}
-                </td>
-                <td>
-                    {% if reg.check_in_time %}
-                    <span style="color: var(--success);">
-                        <i class="fas fa-check-circle"></i> Attended
-                    </span>
-                    {% else %}
-                    <span style="color: var(--dark-gray);">
-                        <i class="fas fa-clock"></i> Not Yet
-                    </span>
-                    {% endif %}
-                </td>
-                <td>
-                    <div style="display: flex; gap: 5px;">
+    <div style="overflow-x: auto; max-height: 500px; overflow-y: auto;">
+        <table id="registrationsTable">
+            <thead>
+                <tr>
+                    <th>Donor Name</th>
+                    <th>Email</th>
+                    <th>Blood Type</th>
+                    <th>Registration Date</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for reg in registrations %}
+                <tr data-status="{{ reg.status }}" data-registration-id="{{ reg.registration_id }}" id="row-{{ reg.registration_id }}">
+                    <td>{{ reg.donor_name or 'N/A' }}</td>
+                    <td>{{ reg.email or 'N/A' }}</td>
+                    <td>
+                        {% if reg.blood_type %}
+                        <span style="background-color: #ffebee; color: #d32f2f; padding: 0.25rem 0.5rem; border-radius: 4px;">
+                            {{ reg.blood_type }}
+                        </span>
+                        {% else %}
+                        N/A
+                        {% endif %}
+                    </td>
+                    <td>{{ reg.registered_at[:19] if reg.registered_at else 'N/A' }}</td>
+                    <td id="status-cell-{{ reg.registration_id }}">
                         {% if reg.status == 'Pending' %}
-                        <button onclick="updateRegistrationStatus('{{ reg.id }}', 'Confirmed')" class="btn btn-success btn-sm">
-                            <i class="fas fa-check"></i> Confirm
-                        </button>
+                        <span class="status-badge status-upcoming">{{ reg.status }}</span>
+                        {% elif reg.status == 'Confirmed' %}
+                        <span class="status-badge status-ongoing">{{ reg.status }}</span>
+                        {% elif reg.status == 'Attended' %}
+                        <span class="status-badge status-completed">{{ reg.status }}</span>
+                        {% else %}
+                        <span class="status-badge status-cancelled">{{ reg.status }}</span>
                         {% endif %}
-                        
-                        {% if reg.status == 'Confirmed' and not reg.check_in_time %}
-                        <button onclick="markAttendance('{{ reg.id }}')" class="btn btn-primary btn-sm">
-                            <i class="fas fa-user-check"></i> Mark Present
-                        </button>
-                        {% endif %}
-                        
-                        {% if reg.status != 'No-show' %}
-                        <button onclick="updateRegistrationStatus('{{ reg.id }}', 'No-show')" class="btn btn-danger btn-sm">
-                            <i class="fas fa-times"></i> No-show
-                        </button>
-                        {% endif %}
-                    </div>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+                    </td>
+                    <td id="actions-cell-{{ reg.registration_id }}">
+                        <div style="display: flex; gap: 5px;">
+                            <!-- Show Confirm button only for Pending status -->
+                            {% if reg.status == 'Pending' %}
+                            <button onclick="updateRegistrationStatus('{{ reg.registration_id }}', 'Confirmed')" 
+                                    class="btn btn-success btn-sm">
+                                <i class="fas fa-check"></i> Confirm
+                            </button>
+                            {% endif %}
+                            
+                            <!-- Show No-show button for Pending or Confirmed status -->
+                            {% if reg.status in ['Pending', 'Confirmed'] %}
+                            <button onclick="updateRegistrationStatus('{{ reg.registration_id }}', 'No-show')" 
+                                    class="btn btn-danger btn-sm">
+                                <i class="fas fa-times"></i> No-show
+                            </button>
+                            {% endif %}
+                            
+                            <!-- Show Attended button for Confirmed status -->
+                            {% if reg.status == 'Confirmed' %}
+                            <button onclick="updateRegistrationStatus('{{ reg.registration_id }}', 'Attended')" 
+                                    class="btn btn-warning btn-sm">
+                                <i class="fas fa-user-check"></i> Attended
+                            </button>
+                            {% endif %}
+                            
+                            <!-- Status indicators only (no action buttons) -->
+                            {% if reg.status == 'Attended' %}
+                            <span class="btn btn-success btn-sm" style="cursor: default; opacity: 0.7;">
+                                <i class="fas fa-check-double"></i> Attended
+                            </span>
+                            {% endif %}
+                            
+                            {% if reg.status == 'No-show' %}
+                            <span class="btn btn-danger btn-sm" style="cursor: default; opacity: 0.7;">
+                                <i class="fas fa-user-times"></i> No-show
+                            </span>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
     {% else %}
     <div style="padding: 3rem; text-align: center; color: var(--dark-gray);">
         <i class="fas fa-user-slash" style="font-size: 4rem; margin-bottom: 1rem;"></i>
         <h3>No Registrations Found</h3>
-        <p>No donors have registered for this event yet.</p>
+        <p>
+            {% if selected_event %}
+            No donors have registered for "{{ selected_event.event_name }}" yet.
+            {% else %}
+            Select an event to view registrations.
+            {% endif %}
+        </p>
     </div>
     {% endif %}
 </div>
@@ -140,6 +157,10 @@
             <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
                 <span>Attended:</span>
                 <strong>{{ attended_count }}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                <span>No-show:</span>
+                <strong>{{ no_show_count }}</strong>
             </div>
             <div style="display: flex; justify-content: space-between;">
                 <span>Attendance Rate:</span>
@@ -166,8 +187,8 @@
 {% block scripts %}
 <script>
 function filterByEvent() {
-    const eventId = document.getElementById('eventFilter').value;
-    if (eventId === 'all') {
+    var eventId = document.getElementById('eventFilter').value;
+    if (!eventId) {
         window.location.href = "{{ url_for('view_registrations') }}";
     } else {
         window.location.href = "{{ url_for('view_registrations') }}?event_id=" + eventId;
@@ -175,61 +196,76 @@ function filterByEvent() {
 }
 
 function filterRegistrations() {
-    const filterValue = document.getElementById('statusFilter').value;
-    const rows = document.querySelectorAll('#registrationsTable tbody tr');
+    var filterValue = document.getElementById('statusFilter').value;
+    var rows = document.querySelectorAll('#registrationsTable tbody tr');
     
-    rows.forEach(row => {
+    for (var i = 0; i < rows.length; i++) {
+        var row = rows[i];
         if (filterValue === 'all' || row.getAttribute('data-status') === filterValue) {
             row.style.display = '';
         } else {
             row.style.display = 'none';
         }
-    });
+    }
 }
 
-function updateRegistrationStatus(registrationId, status) {
-    if (confirm(`Are you sure you want to update this registration to "${status}"?`)) {
-        fetch(`/registration/${registrationId}/status`, {
+function getActionText(status) {
+    if (status === 'Confirmed') return 'confirm';
+    if (status === 'No-show') return 'mark as No-show';
+    if (status === 'Attended') return 'mark as Attended';
+    return status.toLowerCase();
+}
+
+async function updateRegistrationStatus(registrationId, newStatus) {
+    var actionText = getActionText(newStatus);
+    
+    if (!confirm('Are you sure you want to ' + actionText + ' this registration?')) {
+        return;
+    }
+    
+    var button = document.querySelector('#row-' + registrationId + ' button');
+    var originalHTML = button ? button.innerHTML : '';
+    
+    if (button) {
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+        button.disabled = true;
+    }
+    
+    try {
+        var urlParams = new URLSearchParams(window.location.search);
+        var eventId = urlParams.get('event_id');
+        
+        var response = await fetch('/registration/' + registrationId + '/status', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ status: status })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                location.reload();
-            } else {
-                alert('Failed to update registration status');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Failed to update registration status');
+            body: JSON.stringify({
+                status: newStatus,
+                event_id: eventId
+            })
         });
-    }
-}
-
-function markAttendance(registrationId) {
-    fetch(`/registration/${registrationId}/attendance`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            location.reload();
+        
+        var result = await response.json();
+        
+        if (result.success) {
+            // Reload the page to show updated status
+            window.location.reload();
         } else {
-            alert('Failed to mark attendance');
+            alert(result.message || 'Failed to update status');
+            if (button) {
+                button.innerHTML = originalHTML;
+                button.disabled = false;
+            }
         }
-    })
-    .catch(error => {
+    } catch (error) {
         console.error('Error:', error);
-        alert('Failed to mark attendance');
-    });
+        alert('Error updating registration status');
+        if (button) {
+            button.innerHTML = originalHTML;
+            button.disabled = false;
+        }
+    }
 }
 </script>
 {% endblock %}
