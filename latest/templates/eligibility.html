@@ -17,12 +17,15 @@
                 <i class="fas fa-user"></i> Welcome, {{ donor.donor_name }}
             </span>
             {% endif %}
-            {% if unread_notifications and unread_notifications > 0 %}
+            
+            <!-- Fixed notification badge - only show if variable exists AND > 0 -->
+            {% if unread_notifications is defined and unread_notifications|int > 0 %}
             <a href="{{ url_for('donor_notifications') }}" class="notification-badge">
                 <i class="fas fa-bell fa-lg"></i>
                 <span class="notification-count">{{ unread_notifications }}</span>
             </a>
             {% endif %}
+            
             <button class="btn btn-menu" onclick="toggleSidebar()">
                 <i class="fas fa-bars"></i>
             </button>
@@ -41,7 +44,11 @@
         <a href="{{ url_for('donor_appointment') }}"><i class="fas fa-calendar-plus"></i> Book Appointment</a>
         <a href="{{ url_for('donor_eligibility') }}"><i class="fas fa-clipboard-check"></i> Eligibility</a>
         <a href="{{ url_for('donor_medical') }}"><i class="fas fa-file-medical"></i> Medical Info</a>
-        <a href="{{ url_for('donor_notifications') }}"><i class="fas fa-bell"></i> Alerts</a>
+        <a href="{{ url_for('donor_notifications') }}"><i class="fas fa-bell"></i> Alerts
+        {% if unread_notifications is defined and unread_notifications|int > 0 %}
+        <span class="notification-sidebar-count">{{ unread_notifications }}</span>
+        {% endif %}
+        </a>
         <hr>
         <a href="{{ url_for('logout') }}" class="logout-link"><i class="fas fa-sign-out-alt"></i> Logout</a>
     </nav>
