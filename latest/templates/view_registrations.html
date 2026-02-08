@@ -84,7 +84,7 @@
                         <div style="display: flex; gap: 5px;">
                             <!-- Show Confirm button only for Pending status -->
                             {% if reg.status == 'Pending' %}
-                            <button onclick="updateRegistrationStatus('{{ reg.registration_id }}', 'Confirmed')" 
+                            <button onclick="updateRegistrationStatus('{{ reg.registration_id }}', 'Confirmed', this)" 
                                     class="btn btn-success btn-sm">
                                 <i class="fas fa-check"></i> Confirm
                             </button>
@@ -92,7 +92,7 @@
                             
                             <!-- Show No-show button for Pending or Confirmed status -->
                             {% if reg.status in ['Pending', 'Confirmed'] %}
-                            <button onclick="updateRegistrationStatus('{{ reg.registration_id }}', 'No-show')" 
+                            <button onclick="updateRegistrationStatus('{{ reg.registration_id }}', 'No-show', this)" 
                                     class="btn btn-danger btn-sm">
                                 <i class="fas fa-times"></i> No-show
                             </button>
@@ -100,7 +100,7 @@
                             
                             <!-- Show Attended button for Confirmed status -->
                             {% if reg.status == 'Confirmed' %}
-                            <button onclick="updateRegistrationStatus('{{ reg.registration_id }}', 'Attended')" 
+                            <button onclick="updateRegistrationStatus('{{ reg.registration_id }}', 'Attended', this)" 
                                     class="btn btn-warning btn-sm">
                                 <i class="fas fa-user-check"></i> Attended
                             </button>
@@ -186,6 +186,7 @@
 
 {% block scripts %}
 <script>
+// Function to filter by event
 function filterByEvent() {
     var eventId = document.getElementById('eventFilter').value;
     if (!eventId) {
@@ -195,6 +196,7 @@ function filterByEvent() {
     }
 }
 
+// Function to filter registrations by status
 function filterRegistrations() {
     var filterValue = document.getElementById('statusFilter').value;
     var rows = document.querySelectorAll('#registrationsTable tbody tr');
@@ -209,6 +211,7 @@ function filterRegistrations() {
     }
 }
 
+// Helper function to get action text
 function getActionText(status) {
     if (status === 'Confirmed') return 'confirm';
     if (status === 'No-show') return 'mark as No-show';
@@ -216,26 +219,65 @@ function getActionText(status) {
     return status.toLowerCase();
 }
 
-async function updateRegistrationStatus(registrationId, newStatus) {
+// Main function to update registration status - FIXED VERSION
+async function updateRegistrationStatus(registrationId, newStatus, buttonElement) {
+    console.log('DEBUG JS: updateRegistrationStatus called with registrationId:', registrationId, 'type:', typeof registrationId);
+    
     var actionText = getActionText(newStatus);
     
     if (!confirm('Are you sure you want to ' + actionText + ' this registration?')) {
         return;
     }
     
-    var button = document.querySelector('#row-' + registrationId + ' button');
-    var originalHTML = button ? button.innerHTML : '';
-    
-    if (button) {
-        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
-        button.disabled = true;
-    }
+    // Store original button content
+    var button = buttonElement;
+    var originalHTML = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+    button.disabled = true;
     
     try {
+        // Get the current event ID from URL
         var urlParams = new URLSearchParams(window.location.search);
         var eventId = urlParams.get('event_id');
         
-        var response = await fetch('/registration/' + registrationId + '/status', {
+        console.log('DEBUG JS: eventId from URL:', eventId);
+        
+        if (!eventId) {
+            alert('Error: No event selected. Please select an event from the dropdown first.');
+            button.innerHTML = originalHTML;
+            button.disabled = false;
+            return;
+        }
+        
+        // Try to convert registrationId to integer
+        var registrationIdInt = parseInt(registrationId);
+        console.log('DEBUG JS: Parsed registrationId as integer:', registrationIdInt);
+
+        // With this:
+        var registrationIdInt = registrationId;
+        console.log('DEBUG JS: Using registrationId as:', registrationIdInt);
+
+        // OR if you want to ensure it's a number:
+        var registrationIdInt = parseInt(registrationId.trim());
+        if (isNaN(registrationIdInt)) {
+            console.log('ERROR: registrationId is not a valid number:', registrationId);
+            alert('Error: Invalid registration ID');
+            button.innerHTML = originalHTML;
+            button.disabled = false;
+            return;
+        }
+        
+        if (isNaN(registrationIdInt)) {
+            console.log('DEBUG JS: registrationId is not a number, using as-is:', registrationId);
+            registrationIdInt = registrationId;
+        }
+        
+        var url = '/registration/' + registrationIdInt + '/status';
+        console.log('DEBUG JS: Calling URL:', url);
+        console.log('DEBUG JS: Sending data:', { status: newStatus, event_id: eventId });
+        
+        // Send the request to update status
+        var response = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -246,26 +288,46 @@ async function updateRegistrationStatus(registrationId, newStatus) {
             })
         });
         
+        console.log('DEBUG JS: Response status:', response.status, response.statusText);
+        
         var result = await response.json();
+        console.log('DEBUG JS: Response result:', result);
         
         if (result.success) {
-            // Reload the page to show updated status
+            // Success - show message and reload
+            alert('Status updated successfully!');
             window.location.reload();
         } else {
-            alert(result.message || 'Failed to update status');
-            if (button) {
-                button.innerHTML = originalHTML;
-                button.disabled = false;
-            }
-        }
-    } catch (error) {
-        console.error('Error:', error);
-        alert('Error updating registration status');
-        if (button) {
+            alert('Error: ' + (result.message || 'Failed to update status'));
             button.innerHTML = originalHTML;
             button.disabled = false;
         }
+    } catch (error) {
+        console.error('DEBUG JS: Error:', error);
+        alert('Error updating status. Please check console for details.');
+        button.innerHTML = originalHTML;
+        button.disabled = false;
     }
 }
+
+// Initialize status filter if there's a status in URL
+document.addEventListener('DOMContentLoaded', function() {
+    var urlParams = new URLSearchParams(window.location.search);
+    var status = urlParams.get('status');
+    if (status) {
+        document.getElementById('statusFilter').value = status;
+        filterRegistrations();
+    }
+    
+    // Log all registration IDs for debugging
+    console.log('DEBUG: Page loaded. Registration IDs:');
+    document.querySelectorAll('tr[data-registration-id]').forEach(function(row) {
+        console.log('Row:', row.getAttribute('data-registration-id'), 
+                   'Status:', row.getAttribute('data-status'));
+    });
+    
+    // Test the API endpoint to make sure it's working
+    console.log('DEBUG: Testing if server is reachable...');
+});
 </script>
 {% endblock %}
