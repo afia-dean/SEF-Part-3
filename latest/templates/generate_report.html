@@ -4,27 +4,57 @@
 
 {% block content %}
 <div class="form-container">
-    <h2>Generate Event Report</h2>
-    <form method="POST" action="{{ url_for('generate_report') }}">
+    <h2><i class="fas fa-chart-bar"></i> Generate Event Report</h2>
+    
+    {% if events|length == 0 %}
+    <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle"></i> No events found. You need to create events first before generating reports.
+        <br>
+        <a href="{{ url_for('manage_events') }}" class="btn btn-primary btn-sm mt-2">
+            <i class="fas fa-plus"></i> Create Events
+        </a>
+    </div>
+    {% else %}
+    <form method="POST" action="{{ url_for('generate_report') }}" id="reportForm">
         <div class="form-group">
-            <label>Select Event</label>
-            <select name="event_id" class="form-control" required>
-                <option value="">-- Select Event --</option>
+            <label for="eventSelect"><i class="fas fa-calendar-alt"></i> Select Event</label>
+            <select name="event_id" id="eventSelect" class="form-control" required>
+                <option value="">-- Select an Event --</option>
                 {% for event in events %}
-                <option value="{{ event.id }}" {% if selected_event_id|string == event.id|string %}selected{% endif %}>
-                    {{ event.event_name }}
+                <option value="{{ event.id }}" 
+                        {% if selected_event_id and selected_event_id|string == event.id|string %}selected{% endif %}>
+                    {{ event.event_name }} ({{ event.event_date }})
                 </option>
                 {% endfor %}
             </select>
         </div>
-        <button type="submit" class="btn btn-primary">Generate Preview</button>
+        
+        <div class="form-group">
+            <label for="organizerNotes"><i class="fas fa-sticky-note"></i> Organizer Notes (Optional)</label>
+            <textarea name="organizer_notes" id="organizerNotes" class="form-control" 
+                     rows="3" placeholder="Add any additional notes or comments about the event..."></textarea>
+        </div>
+        
+        <div class="form-buttons">
+            <button type="submit" name="action" value="preview" class="btn btn-primary">
+                <i class="fas fa-eye"></i> Generate Preview
+            </button>
+            
+            {% if preview_data %}
+            <button type="submit" name="action" value="generate" class="btn btn-success">
+                <i class="fas fa-save"></i> Save Report
+            </button>
+            {% endif %}
+        </div>
     </form>
+    {% endif %}
 </div>
 
 {% if preview_data %}
 <style>
     @media print {
-        .header, .sidebar, .form-container, .btn, .footer, .dashboard-header {
+        .header, .sidebar, .form-container, .btn, .footer, .dashboard-header,
+        .no-print {
             display: none !important;
         }
         .report-to-print {
@@ -32,82 +62,222 @@
             padding: 0 !important;
             border: none !important;
             width: 100% !important;
+            box-shadow: none !important;
         }
-        body { background: white; }
+        body { 
+            background: white !important;
+            font-size: 12pt !important;
+        }
+        h2, h3, h4 { color: black !important; }
+    }
+    
+    .print-instructions {
+        background: #f8f9fa;
+        border-left: 4px solid #007bff;
+        padding: 10px;
+        margin: 10px 0;
+        font-size: 0.9rem;
+        border-radius: 4px;
     }
 </style>
 
-<div class="report-preview-card fade-in report-to-print" style="margin-top: 2rem; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+<div class="report-preview-card fade-in report-to-print" 
+     style="margin-top: 2rem; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+    
+    <div class="print-instructions no-print">
+        <i class="fas fa-info-circle"></i> 
+        Tip: Use the Print button below to save as PDF. The print dialog will remove unnecessary elements automatically.
+    </div>
+    
     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--primary-red); padding-bottom: 10px; margin-bottom: 20px;">
         <div>
             <h2 style="color: var(--primary-red); margin: 0;">EVENT SUMMARY REPORT</h2>
-            <p style="color: var(--dark-gray); margin: 5px 0 0 0;">Generated on: {{ preview_data.generated_at }}</p>
+            <p style="color: var(--dark-gray); margin: 5px 0 0 0;">
+                <i class="far fa-calendar"></i> Generated on: {{ preview_data.generated_at }}
+            </p>
         </div>
-        <button onclick="window.print()" class="btn btn-primary">
-            <i class="fas fa-print"></i> Print / Save as PDF
-        </button>
-    </div>
-
-    <div class="grid">
-        <div class="card">
-            <h4>Event Details</h4>
-            <p><strong>Name:</strong> {{ preview_data.event.event_name }}</p>
-            <p><strong>Date:</strong> {{ preview_data.event.event_date }}</p>
-            <p><strong>Location:</strong> {{ preview_data.event.location }}</p>
-        </div>
-        <div class="card">
-            <h4>Attendance Statistics</h4>
-            <p><strong>Total Registrations:</strong> {{ preview_data.total_registrations }}</p>
-            <p><strong>Actual Attendees:</strong> {{ preview_data.attended }}</p>
-            <h3 style="color: var(--success);">Rate: {{ preview_data.attendance_rate }}%</h3>
+        <div class="no-print">
+            <button onclick="window.print()" class="btn btn-primary">
+                <i class="fas fa-print"></i> Print / Save as PDF
+            </button>
         </div>
     </div>
 
-    <div style="margin-top: 30px;">
-        <h4 style="border-bottom: 1px solid var(--medium-gray); padding-bottom: 10px;">Blood Type Analysis</h4>
-        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-            <thead>
-                <tr style="background: var(--light-gray); text-align: left;">
-                    <th style="padding: 12px; border: 1px solid #ddd;">Blood Type</th>
-                    <th style="padding: 12px; border: 1px solid #ddd;">Donor Count</th>
-                    <th style="padding: 12px; border: 1px solid #ddd;">Percentage</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for bt, count in preview_data.blood_type_analysis.items() %}
-                <tr>
-                    <td style="padding: 12px; border: 1px solid #ddd;">{{ bt }}</td>
-                    <td style="padding: 12px; border: 1px solid #ddd;">{{ count }}</td>
-                    <td style="padding: 12px; border: 1px solid #ddd;">{{ ((count / preview_data.attended) * 100) | round(1) if preview_data.attended > 0 else 0 }}%</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <!-- Event Summary -->
+    <div style="margin-bottom: 30px;">
+        <h3 style="color: var(--primary-red); border-bottom: 1px solid #eee; padding-bottom: 10px;">
+            <i class="fas fa-info-circle"></i> Event Details
+        </h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-top: 15px;">
+            <div class="info-card" style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
+                <h4 style="margin: 0 0 10px 0; color: var(--dark-gray);">
+                    <i class="fas fa-tag"></i> Event Name
+                </h4>
+                <p style="font-size: 1.1rem; margin: 0; font-weight: 500;">{{ preview_data.event.event_name }}</p>
+            </div>
+            <div class="info-card" style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
+                <h4 style="margin: 0 0 10px 0; color: var(--dark-gray);">
+                    <i class="far fa-calendar"></i> Event Date
+                </h4>
+                <p style="font-size: 1.1rem; margin: 0; font-weight: 500;">{{ preview_data.event.event_date }}</p>
+            </div>
+            <div class="info-card" style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
+                <h4 style="margin: 0 0 10px 0; color: var(--dark-gray);">
+                    <i class="fas fa-map-marker-alt"></i> Location
+                </h4>
+                <p style="font-size: 1.1rem; margin: 0; font-weight: 500;">{{ preview_data.event.location }}</p>
+            </div>
+        </div>
     </div>
+
+    <!-- Statistics Grid -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 30px;">
+        <div class="card" style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+            <h4 style="color: var(--primary-red); margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 10px;">
+                <i class="fas fa-users"></i> Attendance Statistics
+            </h4>
+            <div style="margin-top: 15px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px; padding: 8px 0; border-bottom: 1px dashed #eee;">
+                    <span>Total Registrations:</span>
+                    <strong style="color: var(--dark-gray);">{{ preview_data.total_registrations }}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px; padding: 8px 0; border-bottom: 1px dashed #eee;">
+                    <span>Confirmed Registrations:</span>
+                    <strong style="color: var(--info);">{{ preview_data.confirmed_count }}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px; padding: 8px 0; border-bottom: 1px dashed #eee;">
+                    <span>Actual Attendees:</span>
+                    <strong style="color: var(--success);">{{ preview_data.attended }}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-top: 15px; padding-top: 10px; border-top: 2px solid #eee;">
+                    <span style="font-weight: bold;">Attendance Rate:</span>
+                    <h3 style="color: var(--success); margin: 0;">{{ preview_data.attendance_rate }}%</h3>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+            <h4 style="color: var(--primary-red); margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 10px;">
+                <i class="fas fa-tint"></i> Blood Type Distribution
+            </h4>
+            <div style="margin-top: 15px;">
+                {% if preview_data.blood_type_analysis and preview_data.blood_type_analysis|length > 0 %}
+                    {% for blood_type, count in preview_data.blood_type_analysis.items() %}
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding: 6px 0; border-bottom: 1px dashed #eee;">
+                        <span>{{ blood_type }}:</span>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <strong>{{ count }}</strong>
+                            <span style="color: var(--medium-gray); font-size: 0.9rem;">
+                                ({{ ((count / preview_data.attended) * 100) | round(1) if preview_data.attended > 0 else 0 }}%)
+                            </span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div style="text-align: center; padding: 20px; color: var(--medium-gray);">
+                        <i class="fas fa-tint-slash" style="font-size: 2rem; margin-bottom: 10px;"></i>
+                        <p>No blood type data available</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Previous Reports Section -->
+    {% if previous_reports and previous_reports|length > 0 %}
+    <div style="margin-top: 40px;" class="no-print">
+        <h3 style="color: var(--primary-red); border-bottom: 1px solid #eee; padding-bottom: 10px;">
+            <i class="fas fa-history"></i> Previously Generated Reports
+        </h3>
+        <div style="overflow-x: auto; margin-top: 15px;">
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="background: var(--light-gray); text-align: left;">
+                        <th style="padding: 12px; border: 1px solid #ddd;">Event Name</th>
+                        <th style="padding: 12px; border: 1px solid #ddd;">Total Donors</th>
+                        <th style="padding: 12px; border: 1px solid #ddd;">Blood Units</th>
+                        <th style="padding: 12px; border: 1px solid #ddd;">Generated Date</th>
+                        <th style="padding: 12px; border: 1px solid #ddd;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for report in previous_reports %}
+                    <tr>
+                        <td style="padding: 12px; border: 1px solid #ddd;">{{ report.event_name or 'Unknown Event' }}</td>
+                        <td style="padding: 12px; border: 1px solid #ddd;">{{ report.total_donors }}</td>
+                        <td style="padding: 12px; border: 1px solid #ddd;">{{ report.blood_units_collected }}</td>
+                        <td style="padding: 12px; border: 1px solid #ddd;">{{ report.generated_date[:10] if report.generated_date else 'N/A' }}</td>
+                        <td style="padding: 12px; border: 1px solid #ddd;">
+                            <a href="{{ url_for('download_report', report_id=report.id) }}" 
+                               class="btn btn-primary btn-sm" style="margin-right: 5px;">
+                                <i class="fas fa-download"></i> Download
+                            </a>
+                            <button onclick="deleteReport('{{ report.id }}')" 
+                                    class="btn btn-danger btn-sm">
+                                <i class="fas fa-trash"></i> Delete
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endif %}
+
+{% if not preview_data and selected_event_id and events|length > 0 %}
+<div class="alert alert-info" style="margin-top: 1rem;">
+    <i class="fas fa-info-circle"></i> Select an event and click "Generate Preview" to see the report.
+</div>
+{% endif %}
+
 {% endblock %}
 
 {% block scripts %}
 <script>
+// Form submission handler
+document.getElementById('reportForm')?.addEventListener('submit', function(e) {
+    const eventSelect = document.getElementById('eventSelect');
+    if (eventSelect && !eventSelect.value) {
+        e.preventDefault();
+        alert('Please select an event first.');
+        eventSelect.focus();
+    }
+});
+
+// Delete report function
 function deleteReport(reportId) {
-    if (confirm('Are you sure you want to delete this report?')) {
+    if (confirm('Are you sure you want to delete this report? This action cannot be undone.')) {
         fetch(`/report/${reportId}`, {
             method: 'DELETE',
         })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
+                alert('Report deleted successfully!');
                 location.reload();
             } else {
-                alert('Failed to delete report');
+                alert('Failed to delete report: ' + (data.message || 'Unknown error'));
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('Failed to delete report');
+            alert('Failed to delete report. Please try again.');
         });
     }
 }
+
+// Print optimization
+window.addEventListener('beforeprint', function() {
+    // Add any pre-print adjustments here
+    console.log('Printing report...');
+});
+
+window.addEventListener('afterprint', function() {
+    // Add any post-print adjustments here
+    console.log('Print completed.');
+});
 </script>
 {% endblock %}
